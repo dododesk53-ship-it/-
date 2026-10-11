@@ -1,0 +1,133 @@
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: transparent; font: 12px/1.5 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; color: #e8eaef; }
+  .hud { --team: #e10600; position: relative; background: linear-gradient(100deg, #15181f, #101217); border: 1px solid #2a2f3b; border-left: 4px solid var(--team); border-radius: 10px; padding: 8px 10px; }
+  .hud.old { opacity: .78; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+  .spread { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+  .team { font-weight: 700; font-size: 13px; }
+  .badge { display: inline-block; padding: 0 7px; border-radius: 999px; border: 1px solid #2f3542; background: #1d212b; white-space: nowrap; font-size: 11px; }
+  .badge.team-c { background: var(--team); border-color: transparent; color: #fff; }
+  .badge.warn { color: #f5c518; border-color: #5c4a10; }
+  .muted { color: #8d93a3; }
+  .num { font-variant-numeric: tabular-nums; }
+  .good { color: #2fbf71; } .mid { color: #f5c518; } .bad { color: #ff7b7b; }
+  .line { margin-top: 5px; }
+  .chg { margin-top: 6px; padding-top: 5px; border-top: 1px dashed #2a2f3b; }
+  .chg div { color: #c9cedb; }
+  .chg div.x { color: #ff9a9a; }
+  button { font: inherit; color: #fff; background: var(--team); border: 0; border-radius: 7px; padding: 3px 10px; cursor: pointer; }
+  button.ghost { background: #1d212b; border: 1px solid #2f3542; color: #e8eaef; }
+  button:hover { filter: brightness(1.12); }
+  details summary { cursor: pointer; color: #8d93a3; }
+  .bar { display: inline-block; width: 44px; height: 5px; border-radius: 3px; background: #0d0f13; border: 1px solid #2a2f3b; vertical-align: middle; overflow: hidden; }
+  .bar i { display: block; height: 100%; }
+</style>
+</head>
+<body>
+<div id="f1m-hud" class="hud"><span class="muted">F1 领队模拟器 · 载入中…</span></div>
+<script>
+(function () {
+  var root = document.getElementById('f1m-hud');
+  var floor = -1;
+  try { floor = getCurrentMessageId(); } catch (e) { floor = -1; }
+  var waited = 0;
+
+  function api() {
+    try { return window.parent.F1Manager || null; } catch (e) { return null; }
+  }
+  function esc(s) {
+    return String(s === null || s === undefined ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function tone(v) { return v >= 60 ? 'good' : v >= 35 ? 'mid' : 'bad'; }
+  function bar(v, color) {
+    var w = Math.max(0, Math.min(100, v));
+    return '<span class="bar"><i style="width:' + w + '%;background:' + color + '"></i></span>';
+  }
+  function open(tab) {
+    var a = api();
+    if (a) a.openPanel(tab);
+  }
+
+  function render() {
+    var a = api();
+    if (!a) {
+      if (waited > 8) {
+        root.innerHTML = '<span class="bad">F1 领队模拟器：后端脚本没有运行。</span> <span class="muted">请在「酒馆助手 → 脚本库」中允许并启用本角色卡的脚本。</span>';
+      }
+      return;
+    }
+    var h;
+    try { h = a.hud(floor); } catch (e) { root.innerHTML = '<span class="bad">状态读取失败：' + esc(e && e.message) + '</span>'; return; }
+    h = JSON.parse(JSON.stringify(h));
+    if (!h.hasGame) {
+      root.innerHTML = '<div class="spread"><span><b class="team">F1 领队模拟器</b> <span class="muted">尚未开局</span></span>' +
+        '<button data-tab="overview">打开管理面板</button></div>';
+      return;
+    }
+    root.style.setProperty('--team', h.team.color || '#e10600');
+    root.className = 'hud' + (h.isLatest ? '' : ' old');
+    var html = '';
+    html += '<div class="spread"><div class="row">' +
+      '<span class="team">' + esc(h.team.name) + '</span>' +
+      '<span class="badge team-c">P' + h.team.rank + ' · ' + h.team.points + ' 分</span>' +
+      '<span class="badge num">' + esc(h.team.funds) + '</span>' +
+      '<span class="badge num" title="预算帽剩余">帽 ' + esc(h.team.cap) + '</span>' +
+      '<span class="badge" title="董事会信心">董事会 <span class="' + tone(h.team.board) + '">' + h.team.board + '</span></span>' +
+      '</div><div class="row">' +
+      '<span class="muted">' + esc(h.season.label) + ' · ' + esc(h.season.track) + '</span>' +
+      '<span class="badge">' + esc(h.season.phase) + '</span>' +
+      (h.pending ? '<span class="badge warn" title="下一条 AI 回复会叙述这些事件">待叙述 ' + h.pending + '</span>' : '') +
+      '<button data-tab="weekend">面板</button>' +
+      '</div></div>';
+
+    var drv = (h.drivers || []).map(function (d) {
+      return '<span><b>' + esc(d.name) + '</b> <span class="muted num">' + d.overall + '</span> 心态' + bar(d.morale, d.morale >= 60 ? '#2fbf71' : d.morale >= 35 ? '#f5c518' : '#ff5a5a') +
+        '<span class="num ' + tone(d.morale) + '">' + d.morale + '</span> 信任<span class="num">' + d.trust + '</span> <span class="muted num">' + d.points + '分</span></span>';
+    }).join('');
+    var cars = (h.cars || []).map(function (c) {
+      return '<span class="muted">' + c.slot + '号车 ' + esc(c.driver) + ' <span class="num">' + (c.score !== null ? c.score : c.overall) + '</span></span>';
+    }).join('');
+    html += '<div class="row line">' + drv + '</div>';
+    html += '<div class="row line">' + cars +
+      (h.projects && h.projects.length ? '<span class="muted">研发：' + h.projects.map(function (p) { return esc(p.label) + ' ' + p.weeksLeft + '周'; }).join('，') + '</span>' : '') +
+      (h.lastRace ? '<span class="muted">上一站：' + esc(h.lastRace) + '</span>' : '') +
+      '</div>';
+    if (h.season.next && h.isLatest) {
+      html += '<div class="row line"><span class="muted">下一步：</span><span>' + esc(h.season.next) + '</span></div>';
+    }
+    if ((h.changes && h.changes.length) || (h.narrated && h.narrated.length)) {
+      html += '<div class="chg">';
+      if (h.narrated && h.narrated.length) html += '<div class="muted">本楼已叙述：' + h.narrated.map(esc).join('、') + '</div>';
+      (h.changes || []).forEach(function (c) {
+        html += '<div class="' + (c.indexOf('✗') === 0 ? 'x' : '') + '">' + esc(c) + '</div>';
+      });
+      html += '</div>';
+    }
+    if (h.warning) html += '<div class="line mid">' + esc(h.warning) + '</div>';
+    root.innerHTML = html;
+  }
+
+  root.addEventListener('click', function (ev) {
+    var b = ev.target && ev.target.closest ? ev.target.closest('button[data-tab]') : null;
+    if (b) open(b.getAttribute('data-tab'));
+  });
+
+  function tick() {
+    if (api()) { render(); return; }
+    waited += 1;
+    render();
+    if (waited < 60) setTimeout(tick, 500);
+  }
+  tick();
+  try {
+    eventOn('f1m_changed', function () { render(); });
+  } catch (e) { /* 非酒馆助手环境 */ }
+})();
+</script>
+</body>
+</html>

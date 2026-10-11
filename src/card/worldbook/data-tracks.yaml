@@ -1,0 +1,60 @@
+# ═══════════════ [F1M数据] 赛道 ═══════════════
+# ⚠ 以下全部是「虚构的占位测试数据」，只用来验证框架。
+#
+# 字段说明：
+#   id           唯一标识，赛历用它引用赛道
+#   name         赛道名
+#   country      国家/地区
+#   type         类型描述（高速 / 街道 / 均衡 …，给 AI 与界面看）
+#   laps         正赛圈数
+#   baseLap      参考圈速（秒）：满分赛车 + 满分车手的干地圈速
+#   pitLoss      进站损失（秒，含进出维修通道）
+#   weights      赛道对赛车属性的需求（会自动归一化）：
+#                  downforce 下压力 / efficiency 气动效率(直线) / power 动力 / mechanical 机械抓地
+#   overtaking   超车容易度 0~100（街道赛很低）
+#   tyreStress   轮胎负荷 0~100（越高越容易多停）
+#   rainChance   降雨概率 0~1
+#   scChance     事故后出动安全车（而非 VSC）的概率 0~1
+#   description  赛道简介
+tracks:
+  - id: t_fast
+    name: 测试赛道·高速
+    country: 测试国
+    type: 高速
+    laps: 45
+    baseLap: 80
+    pitLoss: 20
+    weights: { downforce: 0.15, efficiency: 0.32, power: 0.38, mechanical: 0.15 }
+    overtaking: 78
+    tyreStress: 40
+    rainChance: 0.15
+    scChance: 0.45
+    description: 占位数据：长直道 + 重刹车区，动力与低阻力最重要，超车容易。
+
+  - id: t_street
+    name: 测试赛道·街道
+    country: 测试国
+    type: 街道
+    laps: 55
+    baseLap: 74
+    pitLoss: 19
+    weights: { downforce: 0.35, efficiency: 0.1, power: 0.15, mechanical: 0.4 }
+    overtaking: 18
+    tyreStress: 35
+    rainChance: 0.25
+    scChance: 0.8
+    description: 占位数据：狭窄的街道赛，排位决定一切，安全车频繁。
+
+  - id: t_balanced
+    name: 测试赛道·均衡
+    country: 测试国
+    type: 均衡
+    laps: 52
+    baseLap: 88
+    pitLoss: 22
+    weights: { downforce: 0.3, efficiency: 0.2, power: 0.25, mechanical: 0.25 }
+    overtaking: 55
+    tyreStress: 65
+    rainChance: 0.3
+    scChance: 0.5
+    description: 占位数据：高轮胎负荷的综合型赛道，考验策略。

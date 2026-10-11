@@ -1,0 +1,690 @@
+/**
+ * F1 领队模拟器 · 数据类型定义
+ *
+ * 约定：
+ * - 所有数值属性（车手能力、零件性能、可靠性…）都是 0~100 的浮点数，保留 1 位小数。
+ * - 金额单位统一为「百万美元」(M$)。
+ * - 时间单位：圈速为秒，研发周期为周。
+ * - GameState 必须是纯 JSON（无函数、无 Date、无 Map），这样才能存进酒馆变量。
+ */
+
+// ───────────────────────────── 基础枚举 ─────────────────────────────
+
+/** 零件类型，键来自 rules.parts（默认 8 种，可在规则数据里增删） */
+export type PartType = string;
+/** 轮胎配方，键来自 rules.tyres */
+export type Compound = string;
+
+/** 由零件合成出的赛车属性 */
+export type CarAttr = 'downforce' | 'efficiency' | 'power' | 'mechanical' | 'tyre';
+/** 赛道对赛车属性的需求权重（tyre 不在其中，轮胎友好度单独作用于衰减） */
+export type TrackDemand = 'downforce' | 'efficiency' | 'power' | 'mechanical';
+/** 车手能力项 */
+export type DriverAttr = 'pace' | 'racecraft' | 'consistency' | 'tyre' | 'wet' | 'feedback';
+
+export type FacilityType = 'windTunnel' | 'cfd' | 'simulator' | 'factory';
+export type StaffRole = 'technicalDirector' | 'aeroChief' | 'raceEngineer' | 'pitCrew' | 'strategist';
+
+export type Ambition = 'conservative' | 'standard' | 'aggressive';
+export type Difficulty = 'easy' | 'normal' | 'hard';
+export type Randomness = 'deterministic' | 'fresh';
+export type Weather = 'dry' | 'wet';
+
+/**
+ * 赛季阶段（状态机）
+ * preseason → pre_race → practice → [sprint_qualifying → sprint →] qualifying → race → post_race → (下一站 pre_race | season_end)
+ */
+export type Phase =
+  | 'preseason'
+  | 'pre_race'
+  | 'practice'
+  | 'sprint_qualifying'
+  | 'sprint'
+  | 'qualifying'
+  | 'race'
+  | 'post_race'
+  | 'season_end';
+
+export type PracticeProgram = 'setup' | 'longrun' | 'quali_sim' | 'parts';
+export type QualiApproach = 'safe' | 'standard' | 'aggressive';
+export type PaceMode = 'conserve' | 'balanced' | 'push';
+export type PitTiming = 'early' | 'standard' | 'late';
+
+// ───────────────────────────── 规则 ─────────────────────────────
+
+export interface PartDef {
+  /** 显示名 */
+  name: string;
+  /** 是否属于空气动力学部件（研发消耗风洞/CFD 时长） */
+  aero: boolean;
+  /** 是否允许研发 */
+  developable: boolean;
+  /** 对各项赛车属性的贡献权重 */
+  weights: Partial<Record<CarAttr, number>>;
+  /** 对整车可靠性的权重 */
+  reliabilityWeight: number;
+  /** 研发基础花费 (M$) */
+  baseCost: number;
+  /** 研发基础周期（周） */
+  baseWeeks: number;
+  /** 研发消耗的风洞/CFD 时长 */
+  aeroHours: number;
+  /** 额外生产一件的成本 (M$) */
+  unitCost: number;
+  /** 撞车时该部件损毁的概率 0~1 */
+  crashDamage: number;
+}
+
+export interface TyreDef {
+  name: string;
+  short: string;
+  /** 相对中性胎的圈速差（秒，负数更快） */
+  pace: number;
+  /** 每圈胎龄带来的衰减（秒/圈） */
+  deg: number;
+  /** 悬崖圈数：超过后衰减急剧上升 */
+  cliff: number;
+  /** 是否为雨胎 */
+  wet: boolean;
+  color: string;
+}
+
+export interface AmbitionDef {
+  name: string;
+  /** 预期收益（零件性能点，未计入员工/设施修正） */
+  gain: number;
+  /** 收益波动比例（0.5 = ±50%） */
+  spread: number;
+  costMul: number;
+  weeksMul: number;
+  hoursMul: number;
+  /** 新零件初始可靠性变化 */
+  relDelta: number;
+  /** 首批交付件数 */
+  units: number;
+}
+
+export interface FacilityDef {
+  name: string;
+  maxLevel: number;
+  /** upgradeCost[n] = 升到 n+2 级的花费（1 级升 2 级为 upgradeCost[0]） */
+  upgradeCost: number[];
+  upgradeWeeks: number[];
+}
+
+export interface AiLimits {
+  maxCommands: number;
+  morale: number;
+  trust: number;
+  board: number;
+  media: number;
+  staff: number;
+  funds: number;
+  fitness: number;
+  penalty: number;
+}
+
+export interface Rules {
+  seasonYear: number;
+  pointsRace: number[];
+  pointsSprint: number[];
+  /** 最快圈加分（0 = 不加分） */
+  fastestLapPoint: number;
+  fastestLapTopN: number;
+  /** 预算帽 (M$) */
+  costCap: number;
+  /** 车手薪水是否计入预算帽 */
+  costCapIncludesSalaries: boolean;
+  /** 设施升级是否计入预算帽 */
+  costCapIncludesFacilities: boolean;
+  /** 赛季末按车队排名发放奖金 (M$)，下标 0 = 冠军 */
+  prizeMoney: number[];
+  /** 每得 1 分的赞助奖金 (M$) */
+  pointBonus: number;
+  /** 赛车综合分每差 1 点的圈速差（秒） */
+  secPerCarPoint: number;
+  /** 车手能力每差 1 点的圈速差（秒） */
+  secPerDriverPoint: number;
+  parts: Record<PartType, PartDef>;
+  tyres: Record<Compound, TyreDef>;
+  /** 干地可用配方（按软→硬） */
+  dryCompounds: Compound[];
+  /** 雨地配方 */
+  wetCompound: Compound;
+  /** 干地正赛至少使用几种不同配方 */
+  mandatoryCompounds: number;
+  ambition: Record<Ambition, AmbitionDef>;
+  /** 每个比赛间隔的基础风洞时长 */
+  aeroAllowanceBase: number;
+  /** 按车队排名的风洞时长倍率（下标 0 = 第 1 名） */
+  aeroAllowanceByPosition: number[];
+  facilities: Record<FacilityType, FacilityDef>;
+  /** 研发并行槽位基础值 */
+  rndSlotsBase: number;
+  /** 零件性能软上限 */
+  partCap: number;
+  /** 新赛季零件性能保留比例 */
+  carryOver: number;
+  /** 冲刺赛圈数占正赛比例 */
+  sprintLapsFactor: number;
+  /** 单次罚退上限 */
+  maxGridPenalty: number;
+  /** AI 叙事指令的单次幅度上限 */
+  aiLimits: AiLimits;
+  /** 董事会信心低于该值时触发「被解雇」剧情 */
+  boardFireThreshold: number;
+}
+
+// ───────────────────────────── 静态数据（来自世界书） ─────────────────────────────
+
+export interface TrackDef {
+  id: string;
+  name: string;
+  country: string;
+  /** 赛道类型描述，如「高速」「街道」「均衡」 */
+  type: string;
+  laps: number;
+  /** 参考圈速（秒）：满分车手 + 满分赛车的干地圈速 */
+  baseLap: number;
+  /** 进站损失（秒，含进出维修区） */
+  pitLoss: number;
+  /** 对赛车属性的需求权重，已归一化 */
+  weights: Record<TrackDemand, number>;
+  /** 超车容易度 0~100 */
+  overtaking: number;
+  /** 轮胎负荷 0~100 */
+  tyreStress: number;
+  /** 降雨概率 0~1 */
+  rainChance: number;
+  /** 事故后出动安全车（而非虚拟安全车）的概率 0~1 */
+  scChance: number;
+  description: string;
+}
+
+export interface RoundDef {
+  id: string;
+  trackId: string;
+  name: string;
+  sprint: boolean;
+  /** 距上一站的间隔周数（第一站表示季前测试到首站的周数） */
+  weeksGap: number;
+  dateLabel: string;
+}
+
+export interface StaffMember {
+  name: string;
+  skill: number;
+  /** 年薪 (M$) */
+  salary: number;
+}
+
+export interface TeamDef {
+  id: string;
+  name: string;
+  short: string;
+  color: string;
+  principal: string;
+  engine: string;
+  base: string;
+  funds: number;
+  /** 每站赞助收入 (M$) */
+  sponsorIncome: number;
+  /** 每站运营成本 (M$)，计入预算帽 */
+  operatingCost: number;
+  facilities: Record<FacilityType, number>;
+  staff: Record<StaffRole, StaffMember>;
+  /** 初始零件规格 */
+  parts: Record<PartType, { perf: number; rel: number }>;
+  /** 董事会预期的车队排名 */
+  targetPosition: number;
+  description: string;
+}
+
+export interface DriverDef {
+  id: string;
+  name: string;
+  short: string;
+  number: number;
+  nationality: string;
+  age: number;
+  teamId: string | null;
+  /** race = 正式车手；reserve = 替补 */
+  role: 'race' | 'reserve';
+  attrs: Record<DriverAttr, number>;
+  potential: number;
+  morale: number;
+  fitness: number;
+  /** 自尊心 0~100：越高越在意待遇不公与车队指令 */
+  ego: number;
+  /** 年薪 (M$) */
+  salary: number;
+  contractEnd: number;
+  traits: string[];
+  description: string;
+}
+
+export interface Database {
+  rules: Rules;
+  teams: TeamDef[];
+  drivers: DriverDef[];
+  tracks: TrackDef[];
+  calendar: RoundDef[];
+  /** 数据来源（世界书条目名） */
+  sources: string[];
+  /** 数据指纹（用于提示数据是否变更） */
+  signature: string;
+}
+
+export interface DataIssue {
+  level: 'error' | 'warning';
+  source: string;
+  path: string;
+  message: string;
+}
+
+// ───────────────────────────── 动态状态 ─────────────────────────────
+
+export interface PartSpec {
+  id: string;
+  type: PartType;
+  version: number;
+  /** 真实性能（未验证前界面只显示预估区间） */
+  perf: number;
+  rel: number;
+  /** 是否已通过练习赛/正赛数据验证 */
+  verified: boolean;
+  /** 交付前的预估区间 */
+  expected: [number, number] | null;
+  introduced: string;
+}
+
+export interface TeamParts {
+  specs: PartSpec[];
+  /** 备件库存：specId → 件数（不含已装车的） */
+  stock: Record<string, number>;
+}
+
+export interface CarState {
+  /** 车号位（1 号车、2 号车…） */
+  slot: number;
+  driverId: string | null;
+  /** 当前装车：零件类型 → specId */
+  fitted: Record<PartType, string>;
+}
+
+export type ProjectKind = 'design' | 'manufacture' | 'facility' | 'pit_training' | 'driver_training';
+
+export interface Project {
+  id: string;
+  kind: ProjectKind;
+  label: string;
+  partType?: PartType;
+  specId?: string;
+  facility?: FacilityType;
+  driverId?: string;
+  attr?: DriverAttr;
+  ambition?: Ambition;
+  rush?: boolean;
+  qty?: number;
+  cost: number;
+  weeksTotal: number;
+  weeksLeft: number;
+  /** 设计项目：预估区间与真实收益（真实收益对界面隐藏） */
+  expected?: [number, number];
+  trueGain?: number;
+  relDelta?: number;
+  units?: number;
+  startedAt: string;
+}
+
+export interface TeamState {
+  id: string;
+  name: string;
+  short: string;
+  color: string;
+  principal: string;
+  engine: string;
+  base: string;
+  isPlayer: boolean;
+  funds: number;
+  /** 本赛季已计入预算帽的支出 */
+  costCapSpent: number;
+  sponsorIncome: number;
+  operatingCost: number;
+  facilities: Record<FacilityType, number>;
+  staff: Record<StaffRole, StaffMember>;
+  parts: Record<PartType, TeamParts>;
+  cars: CarState[];
+  projects: Project[];
+  /** 本周期剩余风洞/CFD 时长 */
+  aeroHours: number;
+  /** 优先车手（升级件默认先给谁、车队指令偏向谁） */
+  driverPriority: string | null;
+  boardConfidence: number;
+  targetPosition: number;
+  mediaReputation: number;
+  staffMorale: number;
+  /** 0~100：资源投向下赛季的比例 */
+  nextSeasonFocus: number;
+  description: string;
+}
+
+export interface DriverStats {
+  starts: number;
+  wins: number;
+  podiums: number;
+  poles: number;
+  points: number;
+  dnfs: number;
+}
+
+export interface DriverState {
+  id: string;
+  name: string;
+  short: string;
+  number: number;
+  nationality: string;
+  age: number;
+  teamId: string | null;
+  role: 'race' | 'reserve';
+  attrs: Record<DriverAttr, number>;
+  potential: number;
+  morale: number;
+  fitness: number;
+  /** 对玩家领队的信任 0~100（仅玩家车队车手有意义） */
+  trust: number;
+  /** 近期状态 -10~10 */
+  form: number;
+  ego: number;
+  salary: number;
+  contractEnd: number;
+  traits: string[];
+  description: string;
+  stats: DriverStats;
+}
+
+/** 单站成绩代码：数字 = 名次；'DNF' 退赛；null = 未参赛 */
+export type ResultCode = number | 'DNF' | null;
+
+export interface DriverStanding {
+  points: number;
+  wins: number;
+  podiums: number;
+  poles: number;
+  fastestLaps: number;
+  dnfs: number;
+  best: number | null;
+  results: ResultCode[];
+  sprintPoints: number;
+}
+
+export interface TeamStanding {
+  points: number;
+  wins: number;
+  podiums: number;
+  best: number | null;
+}
+
+export interface Standings {
+  drivers: Record<string, DriverStanding>;
+  teams: Record<string, TeamStanding>;
+}
+
+// ───────────────────────────── 比赛周末 ─────────────────────────────
+
+export interface DriverPlan {
+  practiceProgram: PracticeProgram;
+  qualiApproach: QualiApproach;
+  /** 轮胎策略：各段配方；'auto' 由策略组自动选择 */
+  tyrePlan: Compound[] | 'auto';
+  /** 冲刺赛起步配方；'auto' 自动 */
+  sprintTyre: Compound | 'auto';
+  paceMode: PaceMode;
+  pitTiming: PitTiming;
+  /** 安全车时是否机会进站 */
+  scReaction: boolean;
+}
+
+export interface TeamOrders {
+  mode: 'free' | 'hold' | 'favor';
+  favorDriverId: string | null;
+}
+
+export interface SetupState {
+  /** 调校信心 0~100 */
+  confidence: number;
+  /** 轮胎数据 0~100 */
+  tyreKnowledge: number;
+  /** 排位模拟加成（秒） */
+  qualiBonus: number;
+}
+
+export interface PracticeEntry {
+  driverId: string;
+  teamId: string;
+  time: number;
+  laps: number;
+}
+
+export interface PracticeResult {
+  timesheet: PracticeEntry[];
+  gains: Record<string, { setup: number; tyre: number; program: PracticeProgram; verified: string[] }>;
+  events: RaceEvent[];
+}
+
+export interface QualiSession {
+  name: string;
+  entries: Array<{ driverId: string; teamId: string; time: number | null; eliminated: boolean; note?: string }>;
+}
+
+export interface QualiResult {
+  kind: 'qualifying' | 'sprint_qualifying';
+  weather: Weather;
+  sessions: QualiSession[];
+  /** 排位名次（未计罚退） */
+  order: string[];
+  /** 最终发车顺序（已计罚退） */
+  grid: string[];
+  pole: { driverId: string; time: number } | null;
+  events: RaceEvent[];
+}
+
+export type RaceEventType =
+  | 'start'
+  | 'overtake'
+  | 'pit'
+  | 'slow_stop'
+  | 'dnf'
+  | 'damage'
+  | 'sc'
+  | 'vsc'
+  | 'sc_end'
+  | 'order'
+  | 'fastest'
+  | 'error'
+  | 'finish'
+  | 'info';
+
+export interface RaceEvent {
+  lap: number;
+  type: RaceEventType;
+  text: string;
+  drivers: string[];
+  /** 是否涉及玩家车队或领跑者（叙事重点） */
+  key: boolean;
+}
+
+export interface ClassificationEntry {
+  driverId: string;
+  teamId: string;
+  pos: number | null;
+  grid: number;
+  status: 'finished' | 'dnf';
+  laps: number;
+  time: number;
+  gap: string;
+  pits: number;
+  bestLap: number;
+  points: number;
+  reason: string;
+  tyres: Compound[];
+}
+
+export interface RaceResult {
+  kind: 'race' | 'sprint';
+  weather: Weather;
+  laps: number;
+  classification: ClassificationEntry[];
+  events: RaceEvent[];
+  fastestLap: { driverId: string; time: number; lap: number } | null;
+  /** 玩家车手每圈名次（用于走势图） */
+  lapChart: Record<string, number[]>;
+  safetyCars: number;
+  /** 车队指令执行情况 */
+  orderOutcomes: Array<{ lap: number; yielded: string; favored: string; complied: boolean }>;
+}
+
+export interface WeekendState {
+  roundIndex: number;
+  weather: { practice: Weather; qualifying: Weather; race: Weather; sprintQualifying: Weather; sprint: Weather };
+  /** 赛前天气预报（降雨概率，0~1） */
+  forecast: { qualifying: number; race: number };
+  setup: Record<string, SetupState>;
+  plans: Record<string, DriverPlan>;
+  teamOrders: TeamOrders;
+  /** 本站罚退（格） */
+  penalties: Record<string, number>;
+  /** 封闭车辆规则：排位后不能换件 */
+  parcFerme: boolean;
+  practice: PracticeResult | null;
+  sprintQualifying: QualiResult | null;
+  sprint: RaceResult | null;
+  qualifying: QualiResult | null;
+  race: RaceResult | null;
+}
+
+// ───────────────────────────── 日志 ─────────────────────────────
+
+export interface RoundSummary {
+  roundIndex: number;
+  trackId: string;
+  trackName: string;
+  weather: Weather;
+  winner: string | null;
+  pole: string | null;
+  fastest: string | null;
+  /** [driverId, 名次或 null, 得分, 状态] */
+  results: Array<[string, number | null, number, 'finished' | 'dnf']>;
+  sprint: Array<[string, number | null, number, 'finished' | 'dnf']> | null;
+}
+
+export interface NewsItem {
+  id: string;
+  at: string;
+  tag: string;
+  text: string;
+}
+
+export interface NarrationEvent {
+  id: string;
+  at: string;
+  kind: string;
+  title: string;
+  detail: string;
+}
+
+export interface AiLogEntry {
+  at: string;
+  messageId: number | null;
+  op: string;
+  target: string;
+  requested: number | string | null;
+  applied: number | string | null;
+  reason: string;
+  ok: boolean;
+  note: string;
+}
+
+export interface GameMeta {
+  createdAt: number;
+  playerTeamId: string;
+  principalName: string;
+  difficulty: Difficulty;
+  randomness: Randomness;
+  dataSignature: string;
+  dataSources: string[];
+}
+
+export interface SeasonState {
+  year: number;
+  /** 第几个赛季（从 1 开始） */
+  number: number;
+  roundIndex: number;
+  phase: Phase;
+  /** 本赛季已过去的周数 */
+  week: number;
+}
+
+export interface GameState {
+  schema: 1;
+  gameId: string;
+  meta: GameMeta;
+  /** 随机数状态（uint32） */
+  rng: number;
+  /** 自增 id 计数器 */
+  seq: number;
+  rules: Rules;
+  tracks: Record<string, TrackDef>;
+  calendar: RoundDef[];
+  season: SeasonState;
+  teams: Record<string, TeamState>;
+  /** 车队显示顺序 */
+  teamOrder: string[];
+  drivers: Record<string, DriverState>;
+  standings: Standings;
+  weekend: WeekendState | null;
+  history: RoundSummary[];
+  news: NewsItem[];
+  /** 待 AI 叙述的事件队列（AI 回复后清空） */
+  narration: NarrationEvent[];
+  /** 最近一次 AI 回复已叙述的事件（供状态条展示） */
+  narrated: NarrationEvent[];
+  flags: Record<string, string | number | boolean>;
+  aiLog: AiLogEntry[];
+  lastSeason: { year: number; driverChampion: string | null; constructorChampion: string | null; playerPosition: number | null } | null;
+}
+
+// ───────────────────────────── 动作 ─────────────────────────────
+
+export type Action =
+  | { type: 'ADVANCE' }
+  | { type: 'START_SEASON' }
+  | { type: 'START_WEEKEND' }
+  | { type: 'RUN_PRACTICE' }
+  | { type: 'RUN_SPRINT_QUALIFYING' }
+  | { type: 'RUN_SPRINT' }
+  | { type: 'RUN_QUALIFYING' }
+  | { type: 'RUN_RACE' }
+  | { type: 'FINISH_ROUND' }
+  | { type: 'START_NEXT_SEASON' }
+  | { type: 'SET_PLAN'; driverId: string; plan: Partial<DriverPlan> }
+  | { type: 'SET_TEAM_ORDERS'; orders: TeamOrders }
+  | { type: 'SET_PRIORITY'; driverId: string | null }
+  | { type: 'START_PROJECT'; partType: PartType; ambition: Ambition; rush?: boolean }
+  | { type: 'CANCEL_PROJECT'; projectId: string }
+  | { type: 'ORDER_UNITS'; partType: PartType; specId: string; qty: number }
+  | { type: 'FIT_PART'; slot: number; partType: PartType; specId: string }
+  | { type: 'UPGRADE_FACILITY'; facility: FacilityType }
+  | { type: 'TRAIN_PIT_CREW' }
+  | { type: 'TRAIN_DRIVER'; driverId: string; attr: DriverAttr }
+  | { type: 'SET_NEXT_SEASON_FOCUS'; value: number }
+  | { type: 'SWAP_DRIVER'; slot: number; driverId: string }
+  | { type: 'CLEAR_NARRATION' };
+
+export interface ActionResult {
+  ok: boolean;
+  state: GameState;
+  /** 给玩家看的一句话结果 */
+  message: string;
+  error?: string;
+}

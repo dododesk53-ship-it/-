@@ -1,0 +1,74 @@
+# ═══════════════ [F1M数据] 规则 ═══════════════
+# 这里可以覆盖引擎的默认规则（深度合并：只写想改的字段即可；写 null 可删除某个默认项）。
+# 下面注释里列出的是默认值，取消注释并修改即可生效。
+rules:
+  seasonYear: 2026          # 起始赛季年份
+
+  # ── 积分 ──
+  # pointsRace: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]   # 正赛积分
+  # pointsSprint: [8, 7, 6, 5, 4, 3, 2, 1]            # 冲刺赛积分
+  # fastestLapPoint: 0        # 最快圈加分（0 = 不加分）
+  # fastestLapTopN: 10        # 最快圈加分需完赛名次在前 N
+
+  # ── 财务（单位：百万美元 M$）──
+  # costCap: 135              # 预算帽：研发、生产、维修、运营支出计入
+  # costCapIncludesSalaries: false
+  # costCapIncludesFacilities: false
+  # prizeMoney: [140, 125, 112, 100, 90, 80, 72, 64, 56, 50]   # 赛季末按车队排名发奖金
+  # pointBonus: 0.05          # 每得 1 分的赞助奖金
+
+  # ── 速度换算 ──
+  # secPerCarPoint: 0.08      # 赛车性能每差 1 分 ≈ 每圈差多少秒
+  # secPerDriverPoint: 0.035  # 车手能力每差 1 分 ≈ 每圈差多少秒
+
+  # ── 研发 ──
+  # aeroAllowanceBase: 40     # 每个比赛间隔的基础风洞/CFD 时长
+  # aeroAllowanceByPosition: [0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15]  # 排名越靠后时长越多
+  # rndSlotsBase: 2           # 同时进行的设计项目数（工厂等级还会增加）
+  # partCap: 100              # 零件性能软上限（越接近越难提升）
+  # carryOver: 0.6            # 新赛季保留多少研发成果
+  # ambition:                 # 研发方案：gain 预期收益 / spread 波动 / costMul 花费倍率 / weeksMul 周期倍率 / relDelta 可靠性变化 / units 首批件数
+  #   conservative: { name: 保守, gain: 1.8, spread: 0.25, costMul: 0.75, weeksMul: 0.8, hoursMul: 0.8, relDelta: 3, units: 2 }
+  #   standard:     { name: 标准, gain: 3.2, spread: 0.45, costMul: 1, weeksMul: 1, hoursMul: 1, relDelta: 0, units: 2 }
+  #   aggressive:   { name: 激进, gain: 5.2, spread: 0.85, costMul: 1.6, weeksMul: 1.35, hoursMul: 1.4, relDelta: -6, units: 1 }
+
+  # ── 零件（可修改名称、权重、成本，也可新增零件类型）──
+  # parts:
+  #   floor:
+  #     name: 底板
+  #     aero: true               # 是否消耗风洞时长
+  #     developable: true        # 是否允许研发
+  #     weights: { downforce: 0.4, efficiency: 0.25, tyre: 0.15 }   # 对赛车属性的贡献
+  #     reliabilityWeight: 0.5
+  #     baseCost: 3              # 研发基础花费
+  #     baseWeeks: 5             # 研发基础周期（周）
+  #     aeroHours: 24            # 风洞时长消耗
+  #     unitCost: 0.8            # 额外生产一件的成本
+  #     crashDamage: 0.3         # 撞车退赛时损毁概率
+  #   power_unit:
+  #     developable: false       # 例：禁止研发动力单元
+
+  # ── 轮胎 ──
+  # tyres:
+  #   soft:   { name: 软胎, short: S, pace: -0.65, deg: 0.095, cliff: 17, wet: false, color: '#e10600' }
+  #   medium: { name: 中性胎, short: M, pace: 0, deg: 0.06, cliff: 27, wet: false, color: '#ffd400' }
+  #   hard:   { name: 硬胎, short: H, pace: 0.5, deg: 0.04, cliff: 40, wet: false, color: '#f2f2f2' }
+  #   inter:  { name: 雨胎, short: I, pace: 0, deg: 0.05, cliff: 38, wet: true, color: '#3fb950' }
+  # dryCompounds: [soft, medium, hard]
+  # wetCompound: inter
+  # mandatoryCompounds: 2     # 干地正赛至少使用几种配方
+
+  # ── 其他 ──
+  # sprintLapsFactor: 0.33    # 冲刺赛圈数 = 正赛圈数 × 该比例
+  # maxGridPenalty: 10
+  # boardFireThreshold: 10    # 赛季末董事会信心低于该值 → 解雇剧情
+  # aiLimits:                 # AI 叙事指令的单次幅度上限
+  #   maxCommands: 8
+  #   morale: 10
+  #   trust: 10
+  #   board: 8
+  #   media: 10
+  #   staff: 10
+  #   funds: 3
+  #   fitness: 20
+  #   penalty: 5

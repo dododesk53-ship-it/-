@@ -1,0 +1,165 @@
+/**
+ * 提示词构建：把存档压缩成给 AI 看的「实时数据」块。
+ * 引擎是唯一事实来源；AI 据此叙事，并按协议输出少量可量化的剧情后果。
+ */
+import { LABELS } from './defaults';
+import { rankOfTeam } from './development';
+import { capRemaining } from './finance';
+import { driverName } from './log';
+import { describeLog, UPDATE_TAG } from './protocol';
+import { carRatings, driverOverall, moraleLabel, teamPaceRanking, trackScore } from './ratings';
+import { nextActionFor, sortedDrivers, sortedTeams } from './season';
+import { planLabel } from './strategy';
+import type { GameState } from './types';
+import { money, signed } from './util';
+import { revealedWeather } from './view';
+import { currentRound } from './weekend';
+
+export interface PromptOptions {
+  /** 显示几条最近新闻 */
+  newsCount?: number;
+  /** 是否附带输出协议提醒（世界书里已有完整规则时可关闭） */
+  protocolReminder?: boolean;
+}
+
+function pct(v: number): string {
+  return `${Math.round(v * 100)}%`;
+}
+
+export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): string {
+  const newsCount = opts.newsCount ?? 4;
+  const rules = state.rules;
+  const team = state.teams[state.meta.playerTeamId];
+  const roundDef = currentRound(state);
+  const track = roundDef ? state.tracks[roundDef.trackId] : undefined;
+  const phase = state.season.phase;
+  const L: string[] = [];
+
+  L.push('<F1领队模拟器·实时数据>');
+  L.push('（以下内容由游戏引擎计算，是唯一事实来源。叙事必须与之一致：不得编造未发生的比赛结果、圈速或零件数值；没跑过的场次不要写出结果。）');
+
+  // 赛季与赛道
+  const next = nextActionFor(state);
+  if (phase === 'season_end') {
+    L.push(`赛季：${state.season.year} 赛季已结束（第 ${state.season.number} 个赛季）`);
+  } else if (track && roundDef) {
+    L.push(
+      `赛季：${state.season.year}（第 ${state.season.number} 季）第 ${state.season.roundIndex + 1}/${state.calendar.length} 站 · ${roundDef.name || track.name} · 赛道「${track.name}」（${track.type}，${track.laps} 圈，超车容易度 ${track.overtaking}，轮胎负荷 ${track.tyreStress}）${roundDef.sprint ? ' · 冲刺赛周末' : ''}`,
+    );
+  }
+  L.push(`当前阶段：${LABELS.phase[phase]}${next ? `（玩家的下一步操作：${next.label}）` : ''}`);
+  if (state.weekend && state.weekend.roundIndex === state.season.roundIndex && phase !== 'pre_race') {
+    const w = state.weekend;
+    const rw = revealedWeather(w, phase, true);
+    const weatherBits = [
+      rw.qualifying ? `排位${LABELS.weather[rw.qualifying]}` : `排位降雨概率 ${pct(w.forecast.qualifying)}`,
+      rw.race ? `正赛${LABELS.weather[rw.race]}` : `正赛降雨概率 ${pct(w.forecast.race)}`,
+    ];
+    L.push(`天气：${weatherBits.join('，')}`);
+  }
+
+  // 车队
+  const rank = rankOfTeam(state, team.id);
+  const teamRows = sortedTeams(state);
+  const leader = teamRows[0];
+  const pts = state.standings.teams[team.id]?.points ?? 0;
+  L.push(
+    `玩家：${state.meta.principalName}（{{user}}），${team.name} 车队领队 · 车队积分榜 P${rank}（${pts} 分${leader && leader !== team.id ? `，榜首 ${state.teams[leader].name} ${state.standings.teams[leader]?.points ?? 0} 分` : ''}）`,
+  );
+  L.push(
+    `资金 ${money(team.funds)} · 预算帽剩余 ${money(capRemaining(team, rules))}/${money(rules.costCap)} · 董事会信心 ${team.boardConfidence.toFixed(0)}（目标车队第 ${team.targetPosition}）· 媒体声誉 ${team.mediaReputation.toFixed(0)} · 员工士气 ${team.staffMorale.toFixed(0)}`,
+  );
+
+  // 赛车
+  const ranking = teamPaceRanking(state, phase !== 'season_end' && track ? track : null);
+  const paceRank = ranking.findIndex(r => r.teamId === team.id) + 1;
+  L.push(`赛车（本站性能全场第 ${paceRank}/${ranking.length}）：`);
+  for (const car of team.cars) {
+    const r = carRatings(team, car, rules);
+    const ts = track ? trackScore(r, track).toFixed(1) : '-';
+    const unverified = Object.keys(rules.parts)
+      .map(pt => team.parts[pt].specs.find(s => s.id === car.fitted[pt]))
+      .filter(s => s && !s.verified)
+      .map(s => `${rules.parts[s!.type].name} v${s!.version}`);
+    L.push(
+      `- ${car.slot} 号车（${driverName(state, car.driverId)}）：本站适配 ${ts} · 下压力 ${r.downforce} 气动效率 ${r.efficiency} 动力 ${r.power} 机械抓地 ${r.mechanical} 轮胎友好 ${r.tyre} 可靠性 ${r.reliability}${unverified.length ? ` · 新件待验证：${unverified.join('、')}` : ''}`,
+    );
+  }
+
+  // 车手
+  L.push('车手：');
+  const driverRows = sortedDrivers(state);
+  for (const car of team.cars) {
+    if (!car.driverId) continue;
+    const d = state.drivers[car.driverId];
+    const st = state.standings.drivers[d.id];
+    const pos = driverRows.indexOf(d.id) + 1;
+    L.push(
+      `- ${d.name}（id:${d.id}，#${d.number}，${d.age} 岁）综合 ${driverOverall(d)} · 心态 ${d.morale.toFixed(0)}（${moraleLabel(d.morale)}）· 对你的信任 ${d.trust.toFixed(0)} · 体能 ${d.fitness.toFixed(0)} · 状态 ${signed(d.form)} · 车手榜 P${pos}（${st?.points ?? 0} 分）${team.driverPriority === d.id ? ' · 车队优先车手' : ''}${d.traits.length ? ` · 性格：${d.traits.join('、')}` : ''}`,
+    );
+  }
+  const reserves = Object.values(state.drivers).filter(d => d.teamId === team.id && !team.cars.some(c => c.driverId === d.id));
+  if (reserves.length) L.push(`替补：${reserves.map(d => `${d.name}（id:${d.id}）`).join('、')}`);
+
+  // 本站策略
+  if (state.weekend && state.weekend.roundIndex === state.season.roundIndex && phase !== 'pre_race' && phase !== 'season_end') {
+    const w = state.weekend;
+    const bits = team.cars
+      .filter(c => c.driverId && w.plans[c.driverId])
+      .map(c => {
+        const p = w.plans[c.driverId!];
+        const tyre = p.tyrePlan === 'auto' ? '轮胎策略交给策略组' : planLabel(rules, p.tyrePlan);
+        return `${driverName(state, c.driverId)}：练习「${LABELS.program[p.practiceProgram]}」/ 排位「${LABELS.approach[p.qualiApproach]}」/ ${tyre} / ${LABELS.paceMode[p.paceMode]}模式 / ${LABELS.pitTiming[p.pitTiming]}`;
+      });
+    if (bits.length) L.push(`领队的本站策略：${bits.join('；')}`);
+    const o = w.teamOrders;
+    L.push(`车队指令：${o.mode === 'favor' && o.favorDriverId ? `偏向 ${driverName(state, o.favorDriverId)}` : LABELS.orders[o.mode]}`);
+  }
+
+  // 研发与库存
+  const projects = team.projects.map(p => `${p.label}（剩余 ${p.weeksLeft} 周${p.expected ? `，预期 +${p.expected[0]}~+${p.expected[1]}` : ''}）`);
+  if (projects.length) L.push(`进行中的项目：${projects.join('；')}`);
+  const pending: string[] = [];
+  for (const [pt, parts] of Object.entries(team.parts)) {
+    for (const s of parts.specs) {
+      const n = parts.stock[s.id] ?? 0;
+      const fitted = team.cars.some(c => c.fitted[pt] === s.id);
+      if (n > 0 && !fitted && s.version > 1) pending.push(`${rules.parts[pt].name} v${s.version} ×${n}`);
+    }
+  }
+  if (pending.length) L.push(`仓库里未装车的升级件：${pending.join('、')}`);
+
+  // 积分榜
+  const topDrivers = driverRows.slice(0, 5).map((id, i) => `P${i + 1} ${driverName(state, id)} ${state.standings.drivers[id].points}`);
+  if (topDrivers.length) L.push(`车手积分榜：${topDrivers.join(' · ')}`);
+
+  // 新闻
+  const news = state.news.slice(-newsCount).map(n => `[${n.tag}] ${n.text}`);
+  if (news.length) L.push(`最近新闻：${news.join(' / ')}`);
+
+  // 最近的 AI 调整
+  const lastAi = state.aiLog.slice(-3).filter(e => e.ok).map(e => describeLog(state, e));
+  if (lastAi.length) L.push(`上一轮剧情已结算：${lastAi.join('；')}`);
+
+  // 待叙述
+  if (state.narration.length) {
+    L.push('【待叙述事件】请在本次回复中自然地描写这些刚刚发生的事（可通过车手、工程师、媒体等角色之口），不要逐条照抄数据：');
+    state.narration.forEach((e, i) => L.push(`${i + 1}. [${e.title}] ${e.detail}`));
+  }
+
+  // 可引用 ID
+  const ids = team.cars
+    .filter(c => c.driverId)
+    .map(c => `${c.driverId}=${driverName(state, c.driverId)}`)
+    .concat(reserves.map(d => `${d.id}=${d.name}`));
+  const rivals = driverRows.filter(id => state.drivers[id]?.teamId !== team.id).slice(0, 6).map(id => `${id}=${driverName(state, id)}`);
+  L.push(`可在指令中引用的车手 id：本队 ${ids.join('，')}${rivals.length ? `；其他 ${rivals.join('，')}` : ''}`);
+  if (opts.protocolReminder !== false) {
+    const lim = rules.aiLimits;
+    L.push(
+      `若剧情产生可量化的后果，在回复末尾用 <${UPDATE_TAG}> 每行一个 JSON 输出（没有就不输出）。单条幅度上限：心态/信任 ±${lim.morale}/±${lim.trust}，董事会 ±${lim.board}，媒体/士气 ±${lim.media}/±${lim.staff}，资金 ±${lim.funds}M，体能 ±${lim.fitness}，罚退 ≤${lim.penalty} 格；每条回复最多 ${lim.maxCommands} 条。`,
+    );
+  }
+  L.push('</F1领队模拟器·实时数据>');
+  return L.join('\n');
+}

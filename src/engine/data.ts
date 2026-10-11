@@ -1,0 +1,492 @@
+/**
+ * 数据库解析与校验。
+ *
+ * 数据来自世界书里名字以「[F1M数据]」开头的条目（YAML）。每个条目可以包含以下任意顶层键：
+ *   rules / 规则、teams / 车队、drivers / 车手、tracks / 赛道、calendar / 赛历
+ * 多个条目会被合并：列表按 id 拼接（同 id 后者覆盖前者），rules 深度合并。
+ *
+ * 本模块只接收「已经解析好的 JS 对象」，YAML 解析由酒馆适配层完成，方便在 Node 中测试。
+ */
+import { DEFAULT_RULES, DRIVER_ATTRS, FACILITIES, STAFF_ROLES, TRACK_DEMANDS } from './defaults';
+import type {
+  Database,
+  DataIssue,
+  DriverAttr,
+  DriverDef,
+  FacilityType,
+  PartDef,
+  RoundDef,
+  Rules,
+  StaffMember,
+  StaffRole,
+  TeamDef,
+  TrackDef,
+  TrackDemand,
+} from './types';
+import { clamp, deepClone, hashString, isPlainObject, round1 } from './util';
+
+export interface RawSource {
+  name: string;
+  data: unknown;
+}
+
+export interface NormalizeResult {
+  db: Database | null;
+  issues: DataIssue[];
+}
+
+const TOP_KEYS: Record<string, 'rules' | 'teams' | 'drivers' | 'tracks' | 'calendar'> = {
+  rules: 'rules',
+  规则: 'rules',
+  teams: 'teams',
+  车队: 'teams',
+  drivers: 'drivers',
+  车手: 'drivers',
+  tracks: 'tracks',
+  赛道: 'tracks',
+  calendar: 'calendar',
+  赛历: 'calendar',
+};
+
+class Ctx {
+  issues: DataIssue[] = [];
+  source = '';
+
+  err(path: string, message: string): void {
+    this.issues.push({ level: 'error', source: this.source, path, message });
+  }
+
+  warn(path: string, message: string): void {
+    this.issues.push({ level: 'warning', source: this.source, path, message });
+  }
+
+  num(
+    obj: Record<string, unknown>,
+    key: string,
+    path: string,
+    opt: { def?: number; min?: number; max?: number; required?: boolean } = {},
+  ): number {
+    const raw = obj[key];
+    if (raw === undefined || raw === null || raw === '') {
+      if (opt.required) this.err(`${path}.${key}`, '缺少必填数值');
+      else if (opt.def === undefined) this.warn(`${path}.${key}`, '缺少数值，已使用 0');
+      return opt.def ?? 0;
+    }
+    const v = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(v)) {
+      this.err(`${path}.${key}`, `「${String(raw)}」不是有效数字`);
+      return opt.def ?? 0;
+    }
+    let out = v;
+    if (opt.min !== undefined && out < opt.min) {
+      this.warn(`${path}.${key}`, `数值 ${v} 小于下限 ${opt.min}，已修正`);
+      out = opt.min;
+    }
+    if (opt.max !== undefined && out > opt.max) {
+      this.warn(`${path}.${key}`, `数值 ${v} 大于上限 ${opt.max}，已修正`);
+      out = opt.max;
+    }
+    return out;
+  }
+
+  str(obj: Record<string, unknown>, key: string, path: string, opt: { def?: string; required?: boolean } = {}): string {
+    const raw = obj[key];
+    if (raw === undefined || raw === null || String(raw).trim() === '') {
+      if (opt.required) this.err(`${path}.${key}`, '缺少必填文本');
+      return opt.def ?? '';
+    }
+    return String(raw).trim();
+  }
+
+  bool(obj: Record<string, unknown>, key: string, def: boolean): boolean {
+    const raw = obj[key];
+    if (raw === undefined || raw === null) return def;
+    if (typeof raw === 'boolean') return raw;
+    if (raw === 'true' || raw === '是' || raw === 1) return true;
+    if (raw === 'false' || raw === '否' || raw === 0) return false;
+    return def;
+  }
+
+  strArr(obj: Record<string, unknown>, key: string): string[] {
+    const raw = obj[key];
+    if (raw === undefined || raw === null) return [];
+    if (Array.isArray(raw)) return raw.map(v => String(v).trim()).filter(Boolean);
+    return String(raw)
+      .split(/[,，、]/)
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+}
+
+function asObject(v: unknown): Record<string, unknown> {
+  return isPlainObject(v) ? v : {};
+}
+
+/** 深度合并：对象递归合并，数组与原始值直接替换，值为 null 表示删除该键 */
+export function deepMerge<T>(base: T, patch: unknown): T {
+  if (!isPlainObject(patch) || !isPlainObject(base)) {
+    return (patch === undefined ? base : (patch as T)) as T;
+  }
+  const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) {
+      delete out[k];
+    } else if (isPlainObject(v) && isPlainObject(out[k])) {
+      out[k] = deepMerge(out[k], v);
+    } else {
+      out[k] = deepClone(v);
+    }
+  }
+  return out as T;
+}
+
+const GENERIC_PART: PartDef = {
+  name: '零件',
+  aero: false,
+  developable: true,
+  weights: {},
+  reliabilityWeight: 0.5,
+  baseCost: 2,
+  baseWeeks: 4,
+  aeroHours: 0,
+  unitCost: 0.5,
+  crashDamage: 0.1,
+};
+
+function normalizeRules(ctx: Ctx, patches: Array<{ source: string; data: unknown }>): Rules {
+  let rules: Rules = deepClone(DEFAULT_RULES);
+  for (const p of patches) {
+    ctx.source = p.source;
+    if (!isPlainObject(p.data)) {
+      ctx.err('rules', '规则必须是键值对象');
+      continue;
+    }
+    rules = deepMerge(rules, p.data);
+  }
+  ctx.source = '规则（合并后）';
+  // 零件定义补全
+  const parts: Record<string, PartDef> = {};
+  for (const [key, def] of Object.entries(asObject(rules.parts))) {
+    const d = deepMerge(GENERIC_PART, def);
+    if (!isPlainObject(d.weights)) d.weights = {};
+    parts[key] = d;
+  }
+  if (Object.keys(parts).length === 0) {
+    ctx.err('rules.parts', '至少需要定义一种零件');
+  }
+  rules.parts = parts;
+  // 轮胎
+  for (const c of rules.dryCompounds) {
+    if (!rules.tyres[c]) ctx.err('rules.dryCompounds', `干地配方「${c}」未在 rules.tyres 中定义`);
+  }
+  if (!rules.tyres[rules.wetCompound]) ctx.err('rules.wetCompound', `雨地配方「${rules.wetCompound}」未定义`);
+  if (!Array.isArray(rules.pointsRace) || rules.pointsRace.some(v => typeof v !== 'number')) {
+    ctx.err('rules.pointsRace', '积分表必须是数字数组');
+    rules.pointsRace = [...DEFAULT_RULES.pointsRace];
+  }
+  if (!Array.isArray(rules.pointsSprint) || rules.pointsSprint.some(v => typeof v !== 'number')) {
+    ctx.err('rules.pointsSprint', '冲刺赛积分表必须是数字数组');
+    rules.pointsSprint = [...DEFAULT_RULES.pointsSprint];
+  }
+  rules.mandatoryCompounds = clamp(Math.round(rules.mandatoryCompounds), 1, rules.dryCompounds.length || 1);
+  return rules;
+}
+
+function normalizeStaff(ctx: Ctx, raw: unknown, path: string): Record<StaffRole, StaffMember> {
+  const obj = asObject(raw);
+  const out = {} as Record<StaffRole, StaffMember>;
+  for (const role of STAFF_ROLES) {
+    const r = obj[role];
+    if (typeof r === 'number') {
+      out[role] = { name: '', skill: clamp(r, 1, 100), salary: 1 };
+      continue;
+    }
+    const m = asObject(r);
+    if (r === undefined) ctx.warn(`${path}.${role}`, '未填写，已使用默认能力 60');
+    out[role] = {
+      name: ctx.str(m, 'name', `${path}.${role}`),
+      skill: ctx.num(m, 'skill', `${path}.${role}`, { def: 60, min: 1, max: 100 }),
+      salary: ctx.num(m, 'salary', `${path}.${role}`, { def: 1, min: 0 }),
+    };
+  }
+  return out;
+}
+
+function normalizeTeam(ctx: Ctx, raw: unknown, index: number, rules: Rules): TeamDef | null {
+  const path = `teams[${index}]`;
+  if (!isPlainObject(raw)) {
+    ctx.err(path, '车队条目必须是对象');
+    return null;
+  }
+  const id = ctx.str(raw, 'id', path, { required: true });
+  if (!id) return null;
+  const facilitiesRaw = asObject(raw.facilities);
+  const facilities = {} as Record<FacilityType, number>;
+  for (const f of FACILITIES) {
+    facilities[f] = Math.round(
+      ctx.num(facilitiesRaw, f, `${path}.facilities`, { def: 2, min: 1, max: rules.facilities[f]?.maxLevel ?? 5 }),
+    );
+  }
+  const carBase = asObject(raw.carBase);
+  const basePerf = ctx.num(carBase, 'perf', `${path}.carBase`, { def: 70, min: 1, max: 100 });
+  const baseRel = ctx.num(carBase, 'rel', `${path}.carBase`, { def: 80, min: 1, max: 100 });
+  const partsRaw = asObject(raw.parts);
+  const parts: TeamDef['parts'] = {};
+  for (const pt of Object.keys(rules.parts)) {
+    const p = partsRaw[pt];
+    if (typeof p === 'number') {
+      parts[pt] = { perf: clamp(p, 1, 100), rel: baseRel };
+      continue;
+    }
+    const po = asObject(p);
+    if (p === undefined && raw.carBase === undefined) {
+      ctx.warn(`${path}.parts.${pt}`, '未填写零件性能，已使用 carBase 或默认值 70/80');
+    }
+    parts[pt] = {
+      perf: ctx.num(po, 'perf', `${path}.parts.${pt}`, { def: basePerf, min: 1, max: 100 }),
+      rel: ctx.num(po, 'rel', `${path}.parts.${pt}`, { def: baseRel, min: 1, max: 100 }),
+    };
+  }
+  for (const k of Object.keys(partsRaw)) {
+    if (!rules.parts[k]) ctx.warn(`${path}.parts.${k}`, `规则中没有零件类型「${k}」，已忽略`);
+  }
+  const name = ctx.str(raw, 'name', path, { def: id });
+  return {
+    id,
+    name,
+    short: ctx.str(raw, 'short', path, { def: name.slice(0, 3).toUpperCase() }),
+    color: ctx.str(raw, 'color', path, { def: '#888888' }),
+    principal: ctx.str(raw, 'principal', path),
+    engine: ctx.str(raw, 'engine', path),
+    base: ctx.str(raw, 'base', path),
+    funds: ctx.num(raw, 'funds', path, { def: 50 }),
+    sponsorIncome: ctx.num(raw, 'sponsorIncome', path, { def: 4, min: 0 }),
+    operatingCost: ctx.num(raw, 'operatingCost', path, { def: 2, min: 0 }),
+    facilities,
+    staff: normalizeStaff(ctx, raw.staff, `${path}.staff`),
+    parts,
+    targetPosition: Math.round(ctx.num(raw, 'targetPosition', path, { def: 5, min: 1 })),
+    description: ctx.str(raw, 'description', path),
+  };
+}
+
+function normalizeDriver(ctx: Ctx, raw: unknown, index: number): DriverDef | null {
+  const path = `drivers[${index}]`;
+  if (!isPlainObject(raw)) {
+    ctx.err(path, '车手条目必须是对象');
+    return null;
+  }
+  const id = ctx.str(raw, 'id', path, { required: true });
+  if (!id) return null;
+  const attrsRaw = asObject(raw.attrs);
+  const attrs = {} as Record<DriverAttr, number>;
+  for (const a of DRIVER_ATTRS) {
+    attrs[a] = round1(ctx.num(attrsRaw, a, `${path}.attrs`, { def: 70, min: 1, max: 100 }));
+  }
+  const teamRaw = raw.team ?? raw.teamId;
+  const role = ctx.str(raw, 'role', path, { def: 'race' });
+  if (role !== 'race' && role !== 'reserve') ctx.warn(`${path}.role`, `未知角色「${role}」，已视为 race`);
+  const name = ctx.str(raw, 'name', path, { def: id });
+  const overall = DRIVER_ATTRS.reduce((s, a) => s + attrs[a], 0) / DRIVER_ATTRS.length;
+  return {
+    id,
+    name,
+    short: ctx.str(raw, 'short', path, { def: name.slice(0, 3).toUpperCase() }),
+    number: Math.round(ctx.num(raw, 'number', path, { def: index + 1, min: 0, max: 999 })),
+    nationality: ctx.str(raw, 'nationality', path),
+    age: Math.round(ctx.num(raw, 'age', path, { def: 25, min: 14, max: 60 })),
+    teamId: teamRaw === undefined || teamRaw === null || teamRaw === '' ? null : String(teamRaw).trim(),
+    role: role === 'reserve' ? 'reserve' : 'race',
+    attrs,
+    potential: ctx.num(raw, 'potential', path, { def: Math.min(100, round1(overall + 5)), min: 1, max: 100 }),
+    morale: ctx.num(raw, 'morale', path, { def: 65, min: 0, max: 100 }),
+    fitness: ctx.num(raw, 'fitness', path, { def: 100, min: 0, max: 100 }),
+    ego: ctx.num(raw, 'ego', path, { def: 50, min: 0, max: 100 }),
+    salary: ctx.num(raw, 'salary', path, { def: 2, min: 0 }),
+    contractEnd: Math.round(ctx.num(raw, 'contractEnd', path, { def: 0 })),
+    traits: ctx.strArr(raw, 'traits'),
+    description: ctx.str(raw, 'description', path),
+  };
+}
+
+function normalizeTrack(ctx: Ctx, raw: unknown, index: number): TrackDef | null {
+  const path = `tracks[${index}]`;
+  if (!isPlainObject(raw)) {
+    ctx.err(path, '赛道条目必须是对象');
+    return null;
+  }
+  const id = ctx.str(raw, 'id', path, { required: true });
+  if (!id) return null;
+  const wRaw = asObject(raw.weights);
+  const weights = {} as Record<TrackDemand, number>;
+  let total = 0;
+  for (const k of TRACK_DEMANDS) {
+    weights[k] = ctx.num(wRaw, k, `${path}.weights`, { def: 0.25, min: 0 });
+    total += weights[k];
+  }
+  if (total <= 0) {
+    ctx.warn(`${path}.weights`, '权重总和为 0，已改为平均分配');
+    for (const k of TRACK_DEMANDS) weights[k] = 0.25;
+    total = 1;
+  }
+  for (const k of TRACK_DEMANDS) weights[k] = Math.round((weights[k] / total) * 1000) / 1000;
+  const name = ctx.str(raw, 'name', path, { def: id });
+  return {
+    id,
+    name,
+    country: ctx.str(raw, 'country', path),
+    type: ctx.str(raw, 'type', path, { def: '均衡' }),
+    laps: Math.round(ctx.num(raw, 'laps', path, { def: 50, min: 3, max: 120 })),
+    baseLap: ctx.num(raw, 'baseLap', path, { def: 85, min: 30, max: 300 }),
+    pitLoss: ctx.num(raw, 'pitLoss', path, { def: 21, min: 5, max: 60 }),
+    weights,
+    overtaking: ctx.num(raw, 'overtaking', path, { def: 55, min: 0, max: 100 }),
+    tyreStress: ctx.num(raw, 'tyreStress', path, { def: 50, min: 0, max: 100 }),
+    rainChance: ctx.num(raw, 'rainChance', path, { def: 0.15, min: 0, max: 1 }),
+    scChance: ctx.num(raw, 'scChance', path, { def: 0.5, min: 0, max: 1 }),
+    description: ctx.str(raw, 'description', path),
+  };
+}
+
+function normalizeRound(ctx: Ctx, raw: unknown, index: number): RoundDef | null {
+  const path = `calendar[${index}]`;
+  if (typeof raw === 'string') {
+    return { id: `r${index + 1}`, trackId: raw, name: '', sprint: false, weeksGap: 2, dateLabel: '' };
+  }
+  if (!isPlainObject(raw)) {
+    ctx.err(path, '赛历条目必须是对象或赛道 id');
+    return null;
+  }
+  const trackId = ctx.str(raw, 'track', path) || ctx.str(raw, 'trackId', path, { required: true });
+  if (!trackId) return null;
+  return {
+    id: ctx.str(raw, 'id', path, { def: `r${index + 1}` }),
+    trackId,
+    name: ctx.str(raw, 'name', path),
+    sprint: ctx.bool(raw, 'sprint', false),
+    weeksGap: Math.round(ctx.num(raw, 'weeksGap', path, { def: 2, min: 0, max: 20 })),
+    dateLabel: ctx.str(raw, 'date', path) || ctx.str(raw, 'dateLabel', path),
+  };
+}
+
+function mergeById<T extends { id: string }>(ctx: Ctx, list: Array<{ item: T; source: string }>, label: string): T[] {
+  const map = new Map<string, T>();
+  const order: string[] = [];
+  for (const { item, source } of list) {
+    if (map.has(item.id)) {
+      ctx.source = source;
+      ctx.warn(`${label}.${item.id}`, `重复的 id，后出现的定义覆盖了前面的`);
+    } else {
+      order.push(item.id);
+    }
+    map.set(item.id, item);
+  }
+  return order.map(id => map.get(id)!);
+}
+
+/**
+ * 把多个世界书条目的原始数据合并、补全、校验成数据库。
+ * 有任何 error 时 db 仍会尽量返回，但 canStart 会是 false（调用方应阻止开局）。
+ */
+export function normalizeDatabase(sources: RawSource[]): NormalizeResult & { canStart: boolean } {
+  const ctx = new Ctx();
+  const rulePatches: Array<{ source: string; data: unknown }> = [];
+  const rawLists: Record<'teams' | 'drivers' | 'tracks' | 'calendar', Array<{ raw: unknown; source: string }>> = {
+    teams: [],
+    drivers: [],
+    tracks: [],
+    calendar: [],
+  };
+
+  for (const src of sources) {
+    ctx.source = src.name;
+    if (!isPlainObject(src.data)) {
+      ctx.err('(根)', '内容不是 YAML 键值对象，已跳过');
+      continue;
+    }
+    let recognized = false;
+    for (const [key, value] of Object.entries(src.data)) {
+      const k = TOP_KEYS[key];
+      if (!k) {
+        ctx.warn(key, '无法识别的顶层键（应为 rules/teams/drivers/tracks/calendar 或对应中文），已忽略');
+        continue;
+      }
+      recognized = true;
+      if (k === 'rules') {
+        rulePatches.push({ source: src.name, data: value });
+      } else if (Array.isArray(value)) {
+        for (const item of value) rawLists[k].push({ raw: item, source: src.name });
+      } else if (value !== null && value !== undefined) {
+        ctx.err(key, '应为列表（YAML 中以「- 」开头的多项）');
+      }
+    }
+    if (!recognized) ctx.warn('(根)', '条目中没有任何可识别的数据');
+  }
+
+  const rules = normalizeRules(ctx, rulePatches);
+
+  const teamItems: Array<{ item: TeamDef; source: string }> = [];
+  rawLists.teams.forEach((r, i) => {
+    ctx.source = r.source;
+    const t = normalizeTeam(ctx, r.raw, i, rules);
+    if (t) teamItems.push({ item: t, source: r.source });
+  });
+  const driverItems: Array<{ item: DriverDef; source: string }> = [];
+  rawLists.drivers.forEach((r, i) => {
+    ctx.source = r.source;
+    const d = normalizeDriver(ctx, r.raw, i);
+    if (d) driverItems.push({ item: d, source: r.source });
+  });
+  const trackItems: Array<{ item: TrackDef; source: string }> = [];
+  rawLists.tracks.forEach((r, i) => {
+    ctx.source = r.source;
+    const t = normalizeTrack(ctx, r.raw, i);
+    if (t) trackItems.push({ item: t, source: r.source });
+  });
+  const rounds: RoundDef[] = [];
+  rawLists.calendar.forEach((r, i) => {
+    ctx.source = r.source;
+    const rd = normalizeRound(ctx, r.raw, i);
+    if (rd) rounds.push(rd);
+  });
+
+  const teams = mergeById(ctx, teamItems, 'teams');
+  const drivers = mergeById(ctx, driverItems, 'drivers');
+  const tracks = mergeById(ctx, trackItems, 'tracks');
+  // 赛历 id 去重
+  const seenRound = new Set<string>();
+  rounds.forEach((r, i) => {
+    if (seenRound.has(r.id)) r.id = `${r.id}_${i + 1}`;
+    seenRound.add(r.id);
+  });
+
+  // ── 交叉校验 ──
+  ctx.source = '交叉校验';
+  const teamIds = new Set(teams.map(t => t.id));
+  const trackIds = new Set(tracks.map(t => t.id));
+  if (teams.length < 2) ctx.err('teams', `至少需要 2 支车队（当前 ${teams.length} 支）`);
+  if (tracks.length < 1) ctx.err('tracks', '至少需要 1 条赛道');
+  if (rounds.length < 1) ctx.err('calendar', '赛历至少需要 1 站');
+  for (const d of drivers) {
+    if (d.teamId && !teamIds.has(d.teamId)) ctx.err(`drivers.${d.id}.team`, `引用了不存在的车队「${d.teamId}」`);
+  }
+  for (const t of teams) {
+    const raceDrivers = drivers.filter(d => d.teamId === t.id && d.role === 'race');
+    if (raceDrivers.length === 0) ctx.err(`teams.${t.id}`, '没有任何正式车手（role: race）');
+    if (raceDrivers.length > 3) ctx.err(`teams.${t.id}`, `正式车手超过 3 名（${raceDrivers.length} 名）`);
+  }
+  for (const r of rounds) {
+    if (!trackIds.has(r.trackId)) ctx.err(`calendar.${r.id}`, `引用了不存在的赛道「${r.trackId}」`);
+  }
+  const numbers = new Map<number, string>();
+  for (const d of drivers.filter(x => x.teamId)) {
+    if (numbers.has(d.number)) ctx.warn(`drivers.${d.id}.number`, `车号 ${d.number} 与 ${numbers.get(d.number)} 重复`);
+    numbers.set(d.number, d.id);
+  }
+
+  const sourceNames = sources.map(s => s.name);
+  const body = { rules, teams, drivers, tracks, calendar: rounds };
+  const db: Database = { ...body, sources: sourceNames, signature: hashString(JSON.stringify(body)) };
+  const canStart = !ctx.issues.some(i => i.level === 'error');
+  return { db, issues: ctx.issues, canStart };
+}

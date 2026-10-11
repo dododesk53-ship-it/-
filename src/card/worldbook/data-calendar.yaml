@@ -1,0 +1,26 @@
+# ═══════════════ [F1M数据] 赛历 ═══════════════
+# ⚠ 以下是「虚构的占位测试赛历」，只用来验证框架。
+#
+# 字段说明（按比赛顺序排列）：
+#   track      赛道 id
+#   name       大奖赛名称（省略则用「赛道名+大奖赛」）
+#   sprint     是否为冲刺赛周末（true / false）
+#   weeksGap   距上一站的周数；第一站表示「季前准备 → 首站」的周数
+#              （这段时间里工厂会推进研发、发放薪水）
+#   date       日期标签（仅显示）
+calendar:
+  - track: t_fast
+    name: 测试大奖赛·第一站
+    sprint: false
+    weeksGap: 3
+    date: 第 1 站
+  - track: t_street
+    name: 测试大奖赛·第二站
+    sprint: true
+    weeksGap: 2
+    date: 第 2 站
+  - track: t_balanced
+    name: 测试大奖赛·第三站
+    sprint: false
+    weeksGap: 2
+    date: 第 3 站

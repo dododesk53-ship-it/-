@@ -1,0 +1,174 @@
+# ═══════════════ [F1M数据] 车手 ═══════════════
+# ⚠ 以下全部是「虚构的占位测试数据」，只用来验证框架。
+#
+# 字段说明：
+#   id            唯一标识（AI 的数值指令用它指代车手，建议简短）
+#   name / short  姓名 / 三字母缩写
+#   number        车号
+#   nationality   国籍
+#   age           年龄（影响成长：≤24 岁成长快，≥34 岁速度开始衰退）
+#   team          所属车队 id（留空 = 自由车手）
+#   role          race 正式车手 / reserve 替补（每队 1~3 名正式车手，决定赛车数量）
+#   attrs         能力 1~100：
+#                   pace 速度 / racecraft 缠斗 / consistency 稳定 /
+#                   tyre 轮胎管理 / wet 雨战 / feedback 技术反馈（影响练习赛调校效率）
+#   potential     潜力上限（综合能力到达后成长几乎停止）
+#   morale        初始心态 0~100
+#   ego           自尊心 0~100：越高越在意升级件分配、优先车手和车队指令
+#   salary        年薪（M$）
+#   contractEnd   合同到期年份
+#   traits        性格标签（给 AI 叙事参考）
+#   description   简介
+drivers:
+  - id: a1
+    name: 测试车手A1
+    short: TA1
+    number: 1
+    nationality: 测试国
+    age: 27
+    team: team_a
+    role: race
+    attrs: { pace: 90, racecraft: 88, consistency: 87, tyre: 84, wet: 86, feedback: 82 }
+    potential: 92
+    morale: 72
+    ego: 70
+    salary: 12
+    contractEnd: 2027
+    traits: [冷静, 擅长排位, 好胜]
+    description: 占位数据：车队的头号车手，速度顶尖但对待遇非常敏感。
+
+  - id: a2
+    name: 测试车手A2
+    short: TA2
+    number: 2
+    nationality: 测试国
+    age: 22
+    team: team_a
+    role: race
+    attrs: { pace: 84, racecraft: 80, consistency: 76, tyre: 78, wet: 74, feedback: 72 }
+    potential: 91
+    morale: 68
+    ego: 55
+    salary: 3
+    contractEnd: 2026
+    traits: [年轻, 进步神速, 偶尔冒进]
+    description: 占位数据：潜力巨大的年轻车手，渴望证明自己。
+
+  - id: a3
+    name: 测试替补A3
+    short: TA3
+    number: 30
+    nationality: 测试国
+    age: 24
+    team: team_a
+    role: reserve
+    attrs: { pace: 78, racecraft: 74, consistency: 75, tyre: 74, wet: 72, feedback: 76 }
+    potential: 84
+    morale: 60
+    ego: 35
+    salary: 0.8
+    contractEnd: 2026
+    traits: [勤奋, 模拟器专家]
+    description: 占位数据：替补车手，主要负责模拟器工作。
+
+  - id: b1
+    name: 测试车手B1
+    short: TB1
+    number: 11
+    nationality: 测试国
+    age: 33
+    team: team_b
+    role: race
+    attrs: { pace: 86, racecraft: 91, consistency: 90, tyre: 89, wet: 90, feedback: 88 }
+    potential: 88
+    morale: 70
+    ego: 60
+    salary: 10
+    contractEnd: 2026
+    traits: [老将, 轮胎管理大师, 雨战高手]
+    description: 占位数据：经验丰富的老将。
+
+  - id: b2
+    name: 测试车手B2
+    short: TB2
+    number: 12
+    nationality: 测试国
+    age: 25
+    team: team_b
+    role: race
+    attrs: { pace: 85, racecraft: 83, consistency: 80, tyre: 80, wet: 79, feedback: 78 }
+    potential: 89
+    morale: 66
+    ego: 78
+    salary: 5
+    contractEnd: 2027
+    traits: [火爆, 进攻型]
+    description: 占位数据：脾气火爆的进攻型车手。
+
+  - id: c1
+    name: 测试车手C1
+    short: TC1
+    number: 21
+    nationality: 测试国
+    age: 29
+    team: team_c
+    role: race
+    attrs: { pace: 82, racecraft: 83, consistency: 84, tyre: 82, wet: 80, feedback: 81 }
+    potential: 84
+    morale: 65
+    ego: 50
+    salary: 4
+    contractEnd: 2027
+    traits: [稳健, 团队型]
+    description: 占位数据：稳定可靠的中游车手。
+
+  - id: c2
+    name: 测试车手C2
+    short: TC2
+    number: 22
+    nationality: 测试国
+    age: 20
+    team: team_c
+    role: race
+    attrs: { pace: 80, racecraft: 74, consistency: 70, tyre: 72, wet: 70, feedback: 68 }
+    potential: 90
+    morale: 70
+    ego: 45
+    salary: 1
+    contractEnd: 2027
+    traits: [新秀, 天赋型]
+    description: 占位数据：新秀车手。
+
+  - id: d1
+    name: 测试车手D1
+    short: TD1
+    number: 31
+    nationality: 测试国
+    age: 31
+    team: team_d
+    role: race
+    attrs: { pace: 79, racecraft: 81, consistency: 82, tyre: 80, wet: 78, feedback: 80 }
+    potential: 80
+    morale: 60
+    ego: 40
+    salary: 2
+    contractEnd: 2026
+    traits: [老练, 低调]
+    description: 占位数据：尾部车队的领军人物。
+
+  - id: d2
+    name: 测试车手D2
+    short: TD2
+    number: 32
+    nationality: 测试国
+    age: 26
+    team: team_d
+    role: race
+    attrs: { pace: 76, racecraft: 74, consistency: 74, tyre: 75, wet: 72, feedback: 70 }
+    potential: 80
+    morale: 62
+    ego: 50
+    salary: 1
+    contractEnd: 2026
+    traits: [付费车手]
+    description: 占位数据：带资车手。
