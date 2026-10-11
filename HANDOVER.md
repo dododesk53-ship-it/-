@@ -1,0 +1,130 @@
+# F1 领队模拟器 · 交接文档
+
+更新时间：2026-10-11（UTC）
+分支：`vorflux/f1-principal-framework`
+草稿 PR：https://github.com/dododesk53-ship-it/-/pull/1
+
+## 1. 现状
+
+- 框架代码已经完成并推送。功能说明和使用方法见 `README.md`。
+- 单元测试、集成测试、类型检查、构建都已通过。
+- 在「模拟酒馆环境」的本地开发页里，人工检查过悬浮面板的 7 个页面和楼层状态条。
+- **还没有在真实的 SillyTavern + 酒馆助手里做端到端测试。** 代码精简和代码审查也没有做——这几个子任务因额度不足被中止，没有留下任何改动。
+
+## 2. 交付物
+
+| 文件 | 说明 |
+| --- | --- |
+| `dist/F1领队模拟器.png` | 角色卡（推荐导入这个） |
+| `dist/F1领队模拟器.json` | 同一张卡的 JSON 版本（chara_card_v3） |
+| `dist/f1m-backend.js` | 后端脚本，已内嵌进角色卡 |
+| `dist/f1m-panel.html` | 悬浮管理面板，已内嵌进后端脚本 |
+| `dist/f1m-hud.html` | 楼层状态条，已内嵌进正则 |
+
+导入方法：导入 PNG → 导入内嵌世界书选「是」→ 允许角色脚本（酒馆助手弹窗）和角色正则 → 点输入框附近的「F1管理面板」开局。
+
+## 3. 需求对照
+
+| 需求 | 实现位置 |
+| --- | --- |
+| 玩家扮演车队领队 | `src/card/description.md`、世界书 `[F1M] 叙事规则` |
+| 先不写车队/车手/赛道资料，只搭框架 | 世界书 `[F1M数据]` 条目里只有虚构的占位数据（4 队 / 9 车手 / 3 赛道 / 3 站），带逐字段注释 |
+| 调研酒馆助手能做什么 | `README.md` 第一节 |
+| 车手水平 | `src/engine/ratings.ts`（6 项能力 + 心态 / 信任 / 体能 / 状态 / 自尊心，成长与衰退在 `season.ts`） |
+| 零件升级 | `src/engine/development.ts`（研发方案、隐藏的真实收益、交付件数、生产、设施、训练） |
+| 赛车水平 | `ratings.ts` 的 `carRatings` / `trackScore`（8 类零件 → 5 项属性 + 可靠性 → 赛道适配分） |
+| 领队的策略选择 | `weekend.ts`、`race.ts`、`strategy.ts`（练习项目、排位方案、轮胎策略、驾驶模式、进站时机、安全车进站、车队指令） |
+| 升级件给哪位车手 | 每台车独立装件（`fitPart`）；正赛前检查分配公平性（`season.ts` 的 `applyAllocationFairness`）；优先车手（`actions.ts` 的 `setPriority`） |
+| 独立引擎，存档跟随楼层 | `src/tavern/store.ts` + `controller.ts` |
+| 悬浮面板 + 楼层状态条 | `src/ui/panel/`（Vue 3）、`src/ui/hud/hud.html` |
+
+## 4. 验证情况
+
+已验证（本会话实际运行）：
+
+- `npm test`：7 个文件、55 个测试全部通过。
+  - 引擎：数据校验、完整赛季、可复现、研发与装件、封闭车辆规则、分配不公、预算帽 / 风洞 / 槽位、比赛统计、车队指令、AI 指令、提示词防剧透。
+  - 控制器（假酒馆环境）：楼层回滚、swipe、编辑、版本清理、导入导出、读档。
+  - 打包产物冒烟测试：在 jsdom 里加载 `dist/f1m-backend.js`。
+- `npm run typecheck`（vue-tsc）通过；`npm run build` 成功。
+- 21 站的合成赛历跑完整赛季约 0.4 秒；退赛率约 6~7%；赛季末存档约 60 KB（压缩前）。
+- 本地开发页（`npm run dev`，端口 5174）：开局、各页面渲染、推进赛程、AI 叙述、状态条显示本楼数值变化，都人工看过。
+
+**未验证（请优先做）：**
+
+1. 真实 SillyTavern 1.19 + 酒馆助手 4.11 里的导入流程：内嵌世界书、脚本授权、正则授权、两个脚本按钮。
+2. `<F1M_HUD/>` 经正则替换成 HTML 代码块后，能否被酒馆助手渲染成 iframe 状态条。
+3. `injectPrompts` 注入的「实时数据」是否真的出现在发给模型的请求里，以及旧楼层的 `<F1M_UPDATE>` 是否被提示词正则剔除。
+4. 普通发送、重新生成、swipe、继续生成、停止生成、编辑、删除楼层时的存档行为。
+5. 悬浮面板（srcdoc iframe）在酒馆页面里能否加载 Vue，以及 `window.parent.F1Manager` 的跨 iframe 访问。
+6. 刷新页面后存档是否保留；手机窄屏下的面板。
+
+## 5. 关键约定（改代码前必读）
+
+| 项目 | 约定 |
+| --- | --- |
+| 数据来源 | 世界书里名字以 `[F1M数据]` 开头的条目（YAML，条目本身禁用）；读取顺序：角色卡绑定的世界书 → 全局世界书 → 角色卡内嵌 `character_book` |
+| 存档版本库 | 聊天变量 `f1m_store`：完整快照用 lz-string 压缩，默认最多 30 个，近 12 楼引用的不会被清理 |
+| 楼层变量 | `f1m_rev`（指针）、`f1m_ai_rev`（AI 结算后的版本）、`f1m_hash`（已结算文本的哈希）、`f1m_changes` / `f1m_narrated`（状态条显示用） |
+| 设置 | 脚本变量 `settings` |
+| 变化事件 | `f1m_changed`（走酒馆 eventSource；状态条用 `eventOn` 监听，面板用 `SillyTavern.getContext().eventSource` 监听） |
+| 标签 | `<F1M_HUD/>` 状态条占位符；`<F1M_UPDATE>…</F1M_UPDATE>` AI 指令块，每行一个 JSON |
+| 提示词 | 注入 id `f1m_state`，默认深度 1、system 角色；另注册了宏 `{{f1m_state}}` |
+| 对外接口 | `window.F1Manager`：`status / view / hud / dispatch / preview* / loadData / newGame / listRevisions / restoreRevision / exportSave / importSave / getSettings / setSettings / requestNarration / reprocessLatest / openPanel / closePanel / togglePanel / subscribe` |
+| 状态条 HTML | 会被原样放进正则替换串，所以不能出现 `{{`、`$数字`、`$<`、三个反引号、`<user>`/`<bot>`/`<char>`（`scripts/build.mjs` 会检查） |
+| 后端打包 | 脚本在 `<script type="module">` 里执行，打包后会把 `</script` 转义成 `<\/script` |
+| 随机性 | 随机数状态存在存档里，同一存档加同一操作得到同一结果；开局可选「每次重抽」 |
+| AI 权限 | AI 只能改心态、信任、体能、董事会、媒体、士气、小额资金、新闻、罚退、剧情标记，并且有单条和累计上限；赛车性能、零件、比赛结果改不了 |
+
+## 6. 已知风险与待办
+
+1. **端到端测试缺失**（见第 4 节）。最可能出问题的地方：正则替换串在 ST 1.19 里的处理、酒馆助手对角色脚本的授权流程、追加 `<F1M_HUD/>` 时用到的 `setChatMessages` 与流式输出或其他扩展的交互。
+2. **存档体积**：每个版本是完整快照（换成正式数据后，赛季末每个版本压缩后约 20~30 KB），30 个版本最多约 1 MB，存在聊天元数据里。如果保存变慢，可以改成「关键帧 + 差分」存储，或者调低版本上限。
+3. **回滚语义**：面板操作挂在最新楼层。如果之后重 roll 这一楼，这些操作会跟着旧 swipe 一起回滚。这是有意的设计，需要确认玩家是否接受。
+4. **数值平衡只用占位数据粗调过**：车队资金偏宽裕；安全车偏少（每场约 0.1~0.3 次）；大多数赛道一停最优。正式数据填好后需要重新调整 `rules` 里的参数。
+5. **未实现**：合同续约、转会、车手市场、员工招聘；动力单元配额与罚退；比赛中途变天；群聊。
+6. **代码审查与精简没有做**。建议重点审查：
+   - 引擎在极端数据下的健壮性（单车队、超短赛历、奇怪的 YAML）；
+   - 控制器在重新生成、继续生成、停止生成时的事件顺序；
+   - 角色卡 JSON 字段与酒馆助手 zod 结构、ST 导入逻辑的兼容性。
+
+## 7. 建议的端到端测试步骤
+
+1. 启动 SillyTavern 1.19：`git clone -b release https://github.com/SillyTavern/SillyTavern` → `npm install` → `node server.js`。
+2. 安装酒馆助手：在 ST 扩展面板用仓库地址 https://github.com/N0VI028/JS-Slash-Runner 安装。
+3. 准备一个假的 OpenAI 兼容服务（`POST /v1/chat/completions`，同时支持 `stream: true` 的 SSE，外加 `GET /v1/models`）：
+   - 把请求体写进日志；
+   - 返回一段叙事，末尾附带
+     `<F1M_UPDATE>{"op":"morale","driver":"c1","delta":3}</F1M_UPDATE>`；
+   - 每次请求换一个 delta，方便区分 swipe。
+   在 ST 里选择「Chat Completion → Custom (OpenAI-compatible)」并填入这个地址。
+4. 按第 4 节「未验证」的 6 项逐条检查，然后：
+   - 研发完成后，把新件只装给一台车，下一场正赛前应出现「升级件分配引发不满」的新闻；
+   - 设置车队指令「偏向」，比赛事件里应出现让车或抗命。
+5. 本地开发页 `npm run dev` 可以在不装 ST 的情况下调试面板和状态条。
+   在没有中文字体的 Linux 截图环境里，可以把 `DroidSansFallbackFull.ttf` 复制到 `dev/public/cjk.ttf`（已被 gitignore）来显示中文。
+
+## 8. 开发命令
+
+```bash
+npm install
+npm test          # 测试
+npm run typecheck # 类型检查
+npm run build     # 生成 dist/（角色卡、后端、面板、状态条）
+npm run dev       # 本地开发页 http://localhost:5174（先 build 一次）
+```
+
+目录结构见 `README.md` 第五节。
+
+## 9. 调研参考
+
+- 酒馆助手文档：https://n0vi028.github.io/JS-Slash-Runner-Doc/
+- 酒馆助手源码与类型定义：https://github.com/N0VI028/JS-Slash-Runner（`@types/`）
+- 编写模板：https://github.com/StageDog/tavern_helper_template
+- MVU 变量框架：https://github.com/MagicalAstrogy/MagVarUpdate（本卡没有使用）
+- 本次实现依赖的几个行为（来自源码阅读）：
+  - 酒馆助手只把内容包含 `html>`、`<head>` 或 `<body` 的代码块渲染成前端界面。
+  - 角色脚本存放在 `data.extensions.tavern_helper.scripts`（数组）。
+  - 楼层变量按 swipe 分开存（`chat[i].variables[swipe_id]`）。
+  - ST 的「重新生成」会在 `GENERATION_AFTER_COMMANDS` 之后才删除最后一条 AI 消息，所以注入时要用上一楼的状态。
+  - 正则替换串会先处理 `{{match}}` 和 `$1`、`$<name>`，再做宏替换。
