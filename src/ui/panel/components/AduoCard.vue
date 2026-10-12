@@ -3,7 +3,6 @@ import { computed } from 'vue';
 import type { AduoView } from '../../../engine/view';
 
 const props = defineProps<{ aduo: AduoView }>();
-const multiplier = computed(() => (props.aduo.tier >= 2 ? 0.8 : props.aduo.tier === 1 ? 0.9 : 1));
 const nextEval = computed(() => (props.aduo.nextEvalRound ? `第 ${props.aduo.nextEvalRound} 站后` : '本赛季评估已完成'));
 const maxGap = computed(() => Math.max(...(props.aduo.last?.results.map(row => row.deficitPct) ?? [props.aduo.tier2Deficit]), props.aduo.tier2Deficit));
 </script>
@@ -21,8 +20,8 @@ const maxGap = computed(() => Math.max(...(props.aduo.last?.results.map(row => r
     </div>
     <div class="aduo-stats">
       <div><span>认证升级</span><b>{{ aduo.upgradesUsed }}/{{ aduo.upgradesTotal }}</b><small>剩余 {{ aduo.upgradesLeft }} 次</small></div>
-      <div><span>预算帽额度</span><b>+${{ aduo.capBonus.toFixed(1) }}M</b><small>本赛季 ADUO 追加</small></div>
-      <div><span>研发周期</span><b>×{{ multiplier.toFixed(1) }}</b><small>公开档位对应倍率</small></div>
+      <div><span>预算帽额度</span><b>+${{ aduo.capBonus.toFixed(1) }}M</b><small>{{ aduo.isCustomer ? '供应商' : '本车队' }}本赛季追加</small></div>
+      <div><span>研发周期</span><b>×{{ aduo.weeksMultiplier.toFixed(1) }}</b><small>公开档位对应倍率</small></div>
       <div><span>下次评估</span><b>{{ nextEval }}</b><small>评估站：{{ aduo.evalRounds.map(x => `R${x}`).join(' · ') }}</small></div>
     </div>
     <div v-if="aduo.last" class="manufacturer-table">
@@ -38,5 +37,5 @@ const maxGap = computed(() => Math.max(...(props.aduo.last?.results.map(row => r
 </template>
 
 <style scoped>
-.aduo-card { overflow: hidden; }.aduo-card h3 { margin-bottom: 0; }.aduo-intro { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }.aduo-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--line); background: var(--line); }.aduo-stats div { display: flex; flex-direction: column; gap: 2px; padding: 8px; background: #080a0f; }.aduo-stats span, .aduo-stats small { color: var(--muted); font-size: 11px; }.aduo-stats b { font: italic 800 16px/1.15 var(--font-display); }.manufacturer-table { border-top: 1px solid var(--line); padding-top: 6px; }.mfr-row { display: grid; grid-template-columns: minmax(50px, .8fr) minmax(55px, 1fr) 70px 40px auto; align-items: center; gap: 6px; min-height: 28px; font-size: 11px; }.mfr-row.mine { padding: 0 5px; background: var(--team-soft); }.gap { height: 5px; background: #05060a; border: 1px solid var(--line); transform: skewX(var(--skew)); }.gap i { display: block; height: 100%; background: var(--orange); }.tier { display: inline-flex; align-items: center; justify-content: center; min-height: 19px; padding: 2px 5px; font: italic 800 10px/1 var(--font-display); white-space: nowrap; }.tier.t0 { background: #1b1f29; color: var(--muted); }.tier.t1 { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 16%, #111); }.tier.t2 { color: #160800; background: var(--orange); } @media (max-width: 640px) { .aduo-stats { grid-template-columns: 1fr 1fr; }.mfr-row { grid-template-columns: .9fr 1fr 55px 34px auto; gap: 4px; } }
+.aduo-card { overflow: hidden; }.aduo-card h3 { margin-bottom: 0; }.aduo-intro { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }.badge.info { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 45%, transparent); }.aduo-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--line); background: var(--line); }.aduo-stats div { display: flex; flex-direction: column; gap: 2px; padding: 8px; background: #080a0f; }.aduo-stats span, .aduo-stats small { color: var(--muted); font-size: 11px; }.aduo-stats b { font: italic 800 16px/1.15 var(--font-display); }.manufacturer-table { border-top: 1px solid var(--line); padding-top: 6px; }.mfr-row { display: grid; grid-template-columns: minmax(50px, .8fr) minmax(55px, 1fr) 70px 40px auto; align-items: center; gap: 6px; min-height: 28px; font-size: 11px; }.mfr-row.mine { padding: 0 5px; background: var(--team-soft); }.gap { height: 5px; background: #05060a; border: 1px solid var(--line); transform: skewX(var(--skew)); }.gap i { display: block; height: 100%; background: var(--orange); }.tier { display: inline-flex; align-items: center; justify-content: center; min-height: 19px; padding: 2px 5px; font: italic 800 10px/1 var(--font-display); white-space: nowrap; }.tier.t0 { background: #1b1f29; color: var(--muted); }.tier.t1 { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 16%, #111); }.tier.t2 { color: #160800; background: var(--orange); } @media (max-width: 640px) { .aduo-stats { grid-template-columns: 1fr 1fr; }.mfr-row { grid-template-columns: .9fr 1fr 55px 34px auto; gap: 4px; } }
 </style>

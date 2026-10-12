@@ -148,6 +148,10 @@ export interface AduoView {
   tier: number;
   tierName: string;
   capBonus: number;
+  /** 当前公开档位对应的动力单元研发周期倍率 */
+  weeksMultiplier: number;
+  /** 受 ADUO 认证与客户供应限制的零件 */
+  developmentParts: string[];
   evalRounds: number[];
   nextEvalRound: number | null;
   /** 最近一次评估（round = 0 是季前基准，不产生效果） */
@@ -354,6 +358,8 @@ function aduoView(state: GameState): AduoView {
     tier: dev.aduoTier ?? 0,
     tierName: tierName(dev.aduoTier ?? 0),
     capBonus: dev.aduoCapBonus ?? 0,
+    weeksMultiplier: (dev.aduoTier ?? 0) >= 2 ? r.tier2WeeksMul : (dev.aduoTier ?? 0) === 1 ? r.tier1WeeksMul : 1,
+    developmentParts: [...r.parts],
     evalRounds: [...r.evalRounds].sort((a, b) => a - b),
     nextEvalRound: nextEvalRound(state),
     last: last ? { round: last.round, results: rows(last.results) } : null,

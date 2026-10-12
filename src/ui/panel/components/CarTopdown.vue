@@ -15,7 +15,7 @@ const byType = computed(() => new Map(props.parts.map(part => [part.type, part])
 const locked = computed(() => new Set(props.lockedParts ?? []));
 const range = computed(() => {
   const values = props.parts.map(part => part.perf);
-  return { min: Math.min(...values, 0), max: Math.max(...values, 1) };
+  return values.length ? { min: Math.min(...values), max: Math.max(...values) } : { min: 0, max: 1 };
 });
 
 function perfClass(part: PartView | undefined, type: string): string {
@@ -33,9 +33,12 @@ function svg() {
   for (const type of byType.value.keys()) {
     const part = byType.value.get(type)!;
     const state = [perfClass(part, type), props.selected === type ? 'is-selected' : '', props.projects.some(project => project.partType === type) ? 'is-rnd' : '', part.version > 1 ? 'is-new' : ''].filter(Boolean).join(' ');
-    result = result.replace(new RegExp(`(id="(?:part|label)-${type}" class="[^"]*)"`), `$1 ${state}"`);
+    result = result.replace(new RegExp(`(id="(?:part|label)-${type}" class="[^"]*)"`, 'g'), `$1 ${state}"`);
     const value = locked.value.has(type) ? '锁定' : part.verified ? part.perf.toFixed(1) : part.expected ? `${part.expected[0]}~${part.expected[1]}` : '—';
-    result = result.replace(new RegExp(`(<text id="val-${type}"[^>]*>)[^<]*(</text>)`), `$1${value}$2`);
+    result = result.replace(new RegExp(`(<text[^>]*id="val-${type}"[^>]*>)[^<]*(</text>)`), `$1${value}$2`);
+    if (locked.value.has(type)) {
+      result = result.replace(new RegExp(`(id="part-${type}"[^>]*?)tabindex="0"`), '$1tabindex="-1" aria-disabled="true"');
+    }
   }
   return result;
 }

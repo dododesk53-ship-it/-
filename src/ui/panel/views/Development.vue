@@ -18,7 +18,7 @@ const ambition = ref<Ambition>('standard');
 const rush = ref(false);
 const focus = ref(0);
 const selectedCar = computed(() => p.value.cars[0]);
-const lockedParts = computed(() => (v.value.aduo.isCustomer ? ['power_unit', 'ers'] : []));
+const lockedParts = computed(() => (v.value.aduo.isCustomer ? v.value.aduo.developmentParts : []));
 
 watch(
   developable,
@@ -87,7 +87,7 @@ const matrix = computed(() => {
       <h3>启动新的零件研发</h3>
       <div class="rnd-layout">
         <div class="blueprint-wrap">
-          <div class="blueprint-label">{{ team.short }} · 2026 赛车俯视图</div>
+          <div class="blueprint-label">{{ team.short }} · 1 号车俯视图</div>
           <CarTopdown
             v-if="selectedCar"
             :parts="selectedCar.parts"

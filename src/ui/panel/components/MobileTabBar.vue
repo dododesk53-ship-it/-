@@ -9,13 +9,12 @@ const tabs = [
   ['rnd', '研发', '⌘'],
   ['more', '更多', '•••'],
 ] as const;
-function target(id: string) { return id; }
 function active(id: string) { return id === 'more' ? ['more', 'standings', 'saves'].includes(props.tab) : props.tab === id; }
 </script>
 
 <template>
   <nav class="mobile-tabbar" aria-label="主导航">
-    <button v-for="[id, label, icon] in tabs" :key="id" type="button" :class="{ on: active(id) }" @click="emit('select', target(id))">
+    <button v-for="[id, label, icon] in tabs" :key="id" type="button" :class="{ on: active(id) }" @click="emit('select', id)">
       <span class="tab-icon" aria-hidden="true">{{ icon }}</span><span>{{ label }}</span>
     </button>
   </nav>
