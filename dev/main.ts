@@ -48,7 +48,7 @@ function injectFont(doc: Document | null): void {
   doc.head.appendChild(s);
 }
 injectFont(document);
-new MutationObserver(() => {
+function hookPanelFont(): void {
   const f = document.querySelector('#f1m-panel-root iframe') as HTMLIFrameElement | null;
   if (f && !f.dataset.fontHooked) {
     f.dataset.fontHooked = '1';
@@ -56,7 +56,9 @@ new MutationObserver(() => {
     f.addEventListener('load', applyPanelFont);
     applyPanelFont();
   }
-}).observe(document.body, { childList: true, subtree: true });
+}
+new MutationObserver(hookPanelFont).observe(document.body, { childList: true, subtree: true });
+hookPanelFont();
 
 const chat = document.getElementById('chat')!;
 const input = document.getElementById('input') as HTMLTextAreaElement;
