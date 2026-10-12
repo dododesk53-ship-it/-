@@ -321,4 +321,18 @@ describe('数据错误', () => {
     expect(hud.ferrari!.fans).toHaveLength(2);
     expect((await ctrl.loadData()).teams.find(t => t.id === 'ferrari')?.special).toBe('ferrari');
   });
+
+  it('被法拉利撤职后状态条不再显示下一步', async () => {
+    const env = new FakeTavern();
+    const ctrl = new F1Controller(env);
+    ctrl.init();
+    await ctrl.newGame({ playerTeamId: 'ferrari', seed: 7 });
+    const st = ctrl.stateAt()!;
+    expect(ctrl.hud(0).season?.next).toBeTruthy();
+    st.ferrari!.dismissed = '测试';
+    expect((await ctrl.importSave(JSON.stringify(st))).ok).toBe(true);
+    const hud = ctrl.hud(0);
+    expect(hud.ferrari?.dismissed).toBe('测试');
+    expect(hud.season?.next ?? null).toBeNull();
+  });
 });

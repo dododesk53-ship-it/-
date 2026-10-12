@@ -23,7 +23,6 @@ import { migrateState } from '../engine/migrate';
 import { buildStatePrompt } from '../engine/prompt';
 import { applyAiCommands, describeLog, parseAiCommands } from '../engine/protocol';
 import { carRatings, driverOverall, moraleLabel, trackScore } from '../engine/ratings';
-import { nextActionFor } from '../engine/season';
 import type { Action, Ambition, DataIssue, DriverAttr, FacilityType, GameState } from '../engine/types';
 import { hashString, money, round1 } from '../engine/util';
 import { buildView, type GameView } from '../engine/view';
@@ -235,7 +234,7 @@ export class F1Controller {
     const round = s.calendar[s.season.roundIndex];
     const track = round ? s.tracks[round.trackId] : undefined;
     const v = buildView(s);
-    const next = nextActionFor(s);
+    const next = v.next;
     const lastHist = s.history[s.history.length - 1];
     let lastRace: string | null = null;
     if (lastHist) {

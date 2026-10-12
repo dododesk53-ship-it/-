@@ -1,7 +1,7 @@
 /**
  * 旧存档升级：补齐 2026 规则新增的字段，保证旧版本（2025 规则）的存档可以继续读取。
  *
- * - 规则：只补缺失的键（不覆盖存档里已有的值），包括新零件类型「能量回收系统」。
+ * - 规则：只补缺失的键（不覆盖存档里已有的值）。零件表、轮胎表不回填，只新增「能量回收系统」。
  * - 车队：补齐缺失的零件类型（按 70/80 的基础规格），并装到每台车上。
  * - 车手：按当前装车初始化动力单元配额计数。
  * - 法拉利：旧存档没有该字段时设为 null（不启用机制）。
@@ -14,8 +14,12 @@ import { resetPuUsage } from './powerunit';
 import type { GameState } from './types';
 import { deepClone } from './util';
 
-function fillMissing(target: Record<string, unknown>, defaults: Record<string, unknown>): void {
+/** 玩家可以自由增删条目的规则表：不能按默认值回填，否则会恢复被有意删除的零件 / 轮胎 */
+const OPEN_MAPS = new Set(['parts', 'tyres']);
+
+function fillMissing(target: Record<string, unknown>, defaults: Record<string, unknown>, top = false): void {
   for (const [k, v] of Object.entries(defaults)) {
+    if (top && OPEN_MAPS.has(k)) continue;
     if (!(k in target) || target[k] === undefined) target[k] = deepClone(v);
     else if (v && typeof v === 'object' && !Array.isArray(v) && target[k] && typeof target[k] === 'object' && !Array.isArray(target[k])) {
       fillMissing(target[k] as Record<string, unknown>, v as Record<string, unknown>);
@@ -28,7 +32,10 @@ export function migrateState(state: GameState): GameState {
   if (state.ferrari === undefined) state.ferrari = null;
   // 已经是 2026 规则的存档（有 puAllocation）不再补规则：玩家可能在世界书里有意删掉了某些默认项
   if (state.rules.puAllocation) return state;
-  fillMissing(state.rules as unknown as Record<string, unknown>, DEFAULT_RULES as unknown as Record<string, unknown>);
+  fillMissing(state.rules as unknown as Record<string, unknown>, DEFAULT_RULES as unknown as Record<string, unknown>, true);
+  // 2026 新增的零件类型只有能量回收系统
+  state.rules.parts.ers ??= deepClone(DEFAULT_RULES.parts.ers);
+  for (const pt of Object.keys(state.rules.puAllocation)) if (!state.rules.parts[pt]) delete state.rules.puAllocation[pt];
 
   for (const team of Object.values(state.teams)) {
     for (const pt of Object.keys(state.rules.parts)) {

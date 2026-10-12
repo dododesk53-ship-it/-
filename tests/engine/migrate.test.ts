@@ -30,6 +30,21 @@ describe('旧存档升级', () => {
     expect(after.history).toHaveLength(2);
   });
 
+  it('不恢复玩家有意删除的零件和轮胎', () => {
+    const raw = legacy();
+    delete raw.rules.parts.floor;
+    for (const t of Object.values(raw.teams)) {
+      delete t.parts.floor;
+      for (const c of t.cars) delete c.fitted.floor;
+    }
+    delete raw.rules.tyres.hard;
+    const s = migrateState(raw);
+    expect(s.rules.parts.floor).toBeUndefined();
+    expect(s.rules.tyres.hard).toBeUndefined();
+    expect(s.teams.team_c.cars[0].fitted.floor).toBeUndefined();
+    expect(s.rules.parts.ers).toBeTruthy();
+  });
+
   it('幂等：对新存档不做改动', () => {
     const s = newTestGame();
     const before = JSON.stringify(s);
