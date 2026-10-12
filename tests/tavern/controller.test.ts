@@ -191,12 +191,12 @@ describe('流式生成、继续生成与重新开局', () => {
     expect(ctrl.status().revisions).toBe(2);
   });
 
-  it('在第一个字之前停止生成：空楼层不结算、不消耗待叙述事件、不加状态条', async () => {
+  it('在第一个字之前停止生成：占位楼层「...」不结算、不消耗待叙述事件、不加状态条', async () => {
     await env.userSays('说点什么');
     const pending = ctrl.stateAt()!.narration.length;
     expect(pending).toBeGreaterThan(0);
     const id = await env.aiStreams('');
-    expect(env.messages[id].swipes[0]).toBe('');
+    expect(env.messages[id].swipes[0]).toBe('...');
     expect(env.messages[id].variables[0][PTR]).toBeUndefined();
     expect(ctrl.stateAt()!.narration).toHaveLength(pending);
     expect(ctrl.status().revisions).toBe(1);

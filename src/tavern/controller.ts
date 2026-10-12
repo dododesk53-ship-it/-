@@ -34,6 +34,15 @@ export const DATA_PREFIX = '[F1M数据]';
 export const INJECT_ID = 'f1m_state';
 export const CHANGE_EVENT = 'f1m_changed';
 export const VERSION = '0.1.0';
+/** 酒馆流式生成开始时 AI 楼层的占位文本 */
+const STREAM_PLACEHOLDER = '...';
+
+interface ProcessOptions {
+  type?: string;
+  force?: boolean;
+  /** 来自 GENERATION_ENDED 的兜底结算 */
+  fallback?: boolean;
+}
 
 export interface Settings {
   inject: boolean;
@@ -479,7 +488,7 @@ export class F1Controller {
   async onGenerationEnded(): Promise<void> {
     const last = this.latestFloor();
     const msg = this.env.getMessage(last);
-    if (msg?.role === 'assistant') await this.processAssistantMessage(last, {});
+    if (msg?.role === 'assistant') await this.processAssistantMessage(last, { fallback: true });
   }
 
   async onMessageReceived(id: number, type?: string): Promise<void> {
@@ -496,7 +505,7 @@ export class F1Controller {
   private processing = new Set<number>();
 
   /** 解析并结算一条 AI 回复（幂等：同样的文本不会重复结算） */
-  async processAssistantMessage(id: number, opts: { type?: string; force?: boolean }): Promise<void> {
+  async processAssistantMessage(id: number, opts: ProcessOptions): Promise<void> {
     if (this.processing.has(id)) return;
     this.processing.add(id);
     try {
@@ -506,14 +515,15 @@ export class F1Controller {
     }
   }
 
-  private async processAssistantMessageInner(id: number, opts: { type?: string; force?: boolean }): Promise<void> {
+  private async processAssistantMessageInner(id: number, opts: ProcessOptions): Promise<void> {
     const msg = this.env.getMessage(id);
     if (!msg || msg.role !== 'assistant') return;
     const vars = this.env.getMessageVars(id);
     const text = msg.message ?? '';
     const body = stripHud(text);
-    // 空回复（在第一个字之前停止生成留下的空楼层）：不结算、不消耗待叙述事件、不加状态条
-    if (!body.trim()) return;
+    // 空回复：不结算、不消耗待叙述事件、不加状态条。
+    // 兜底路径上还要跳过酒馆流式生成的占位文本「...」（在第一个字之前停止生成时会原样留下）。
+    if (!body.trim() || (opts.fallback && body.trim() === STREAM_PLACEHOLDER)) return;
     const hash = hashString(body.trim());
     if (!opts.force && vars.f1m_hash === hash) {
       await this.ensureHud(id, text);

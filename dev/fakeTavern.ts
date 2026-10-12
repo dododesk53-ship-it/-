@@ -105,8 +105,8 @@ export class FakeTavern implements TavernEnv {
 
   /**
    * 按酒馆流式生成的真实顺序模拟一次生成（normal / continue）：
-   * 先建一个空的 AI 楼层（continue 则续写最后一楼），收尾时先发 GENERATION_ENDED（不等待），再发 MESSAGE_RECEIVED；
-   * 在第一个字之前停止生成（text 为空）时，空楼层会留下，且不会发 MESSAGE_RECEIVED。
+   * 先建一个占位文本为「...」的 AI 楼层（continue 则续写最后一楼），收尾时先发 GENERATION_ENDED（不等待），再发 MESSAGE_RECEIVED；
+   * 在第一个字之前停止生成（text 为空）时，占位楼层「...」会留下，且不会发 MESSAGE_RECEIVED。
    */
   async aiStreams(text: string, type: 'normal' | 'continue' = 'normal') {
     await this.fire(this.events.GENERATION_AFTER_COMMANDS, type, {}, false);
@@ -115,9 +115,9 @@ export class FakeTavern implements TavernEnv {
       const m = this.messages[id];
       m.swipes[m.swipe_id] += text;
     } else {
-      this.messages.push({ role: 'assistant', swipes: [''], swipe_id: 0, variables: [{}] });
+      this.messages.push({ role: 'assistant', swipes: ['...'], swipe_id: 0, variables: [{}] });
       id = this.messages.length - 1;
-      this.messages[id].swipes[0] = text;
+      if (text) this.messages[id].swipes[0] = text;
     }
     const ended = this.fire(this.events.GENERATION_ENDED, this.messages.length);
     if (text) await this.fire(this.events.MESSAGE_RECEIVED, id, type);

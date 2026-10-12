@@ -108,6 +108,18 @@ describe('数据解析（世界书 YAML）', () => {
     expect(res.issues.some(i => i.level === 'warning' && i.path === 'rules.dryCompounds')).toBe(true);
   });
 
+  it('设施/研发激进程度里的未知条目（拼写错误）会被忽略并警告，而不是让解析崩溃', () => {
+    const res = normalizeDatabase([
+      ...placeholderSources(),
+      { name: '拼错', data: { rules: { facilities: { wind_tunel: {}, cfd: 'x' }, ambition: { crazy: { units: 2 } } } } },
+    ]);
+    expect(res.db!.rules.facilities).not.toHaveProperty('wind_tunel');
+    expect(res.db!.rules.ambition).not.toHaveProperty('crazy');
+    expect(res.issues.some(i => i.level === 'warning' && i.path === 'rules.facilities.wind_tunel')).toBe(true);
+    expect(res.issues.some(i => i.level === 'error' && i.path === 'rules.facilities.cfd')).toBe(true);
+    expect(res.db!.rules.facilities.cfd.upgradeCost.length).toBeGreaterThan(0);
+  });
+
   it('允许为负的规则字段（轮胎速度、可靠性变化）不会被误报', () => {
     const res = normalizeDatabase([
       ...placeholderSources(),

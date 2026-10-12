@@ -226,6 +226,15 @@ function sanitizeRuleValue(ctx: Ctx, value: unknown, template: unknown, path: st
       return deepClone(template);
     }
     const out: Record<string, unknown> = { ...value };
+    if (FIXED_RULE_MAPS.has(pattern)) {
+      // 键名固定的映射（设施、研发激进程度）：未知条目（多半是拼写错误）忽略并提示
+      for (const k of Object.keys(value)) {
+        if (!(k in template)) {
+          ctx.warn(`rules.${path}.${k}`, `未知条目，已忽略（可用：${Object.keys(template).join('、')}）`);
+          delete out[k];
+        }
+      }
+    }
     for (const [k, t] of Object.entries(template)) {
       const sub = (prefix: string) => (prefix ? `${prefix}.${k}` : k);
       out[k] = sanitizeRuleValue(ctx, value[k], t, sub(path), sub(pattern));
@@ -234,6 +243,9 @@ function sanitizeRuleValue(ctx: Ctx, value: unknown, template: unknown, path: st
   }
   return value;
 }
+
+/** 键名固定的规则映射 */
+const FIXED_RULE_MAPS = new Set(['facilities', 'ambition']);
 
 /** 检查一个「名字由用户决定」的映射（零件、轮胎），每一项按同一个模板检查 */
 function sanitizeRuleMap<T>(ctx: Ctx, value: unknown, generic: T, key: 'parts' | 'tyres'): Record<string, T> {
