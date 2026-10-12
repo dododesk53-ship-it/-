@@ -519,7 +519,29 @@ export class F1Controller {
     const msg = this.env.getMessage(id);
     if (!msg || msg.role !== 'assistant') return;
     const vars = this.env.getMessageVars(id);
-    const text = msg.message ?? '';
+    let text = msg.message ?? '';
+    // 继续生成：酒馆用「不发给AI」正则处理过的原文（没有指令块和占位符）拼接续写内容。
+    // 把原文（含已结算的指令块）放回去，这样本楼文本仍包含全部指令，之后编辑/重算也不会丢失原指令。
+    const cont = this.continuing && this.continuing.floor === id ? this.continuing : null;
+    if (cont) this.continuing = null;
+    const suffix = cont ? continuationSuffix(cont.text, text) : null;
+    if (cont && suffix !== null) {
+      const original = stripHud(cont.text).trimEnd();
+      const restored = original + suffix;
+      if (restored !== stripHud(text)) {
+        text = restored;
+        try {
+          await this.env.setMessageText(id, text);
+        } catch (e) {
+          console.warn('[F1M] 无法恢复续写前的原文', e);
+        }
+      }
+      // 本楼在 AI 结算之后已有面板操作：只把续写部分的指令结算到本楼当前状态上
+      if (!opts.force && typeof vars[PTR] === 'string' && vars[PTR] !== vars[AI_PTR] && suffix.trim()) {
+        await this.settleContinuation(id, text, hashString(stripHud(text).trim()), original, suffix);
+        return;
+      }
+    }
     const body = stripHud(text);
     // 空回复：不结算、不消耗待叙述事件、不加状态条。
     // 兜底路径上还要跳过酒馆流式生成的占位文本「...」（在第一个字之前停止生成时会原样留下）。
@@ -531,14 +553,6 @@ export class F1Controller {
     }
     // 本楼在 AI 结算之后已有面板操作：不从上一楼重算，避免冲掉玩家的操作
     if (!opts.force && typeof vars[PTR] === 'string' && vars[PTR] !== vars[AI_PTR]) {
-      const cont = this.continuing;
-      const original = cont && cont.floor === id ? stripHud(cont.text).trimEnd() : null;
-      if (original !== null && body.startsWith(original)) {
-        // 继续生成：只把新续写部分的指令结算到本楼当前状态上
-        this.continuing = null;
-        await this.settleContinuation(id, text, hash, original, body.slice(original.length));
-        return;
-      }
       this.store.patchFloorVars(id, { f1m_hash: hash });
       this.env.toast('warning', '本楼已有面板操作，修改后的 AI 指令没有重新结算');
       return;
@@ -611,6 +625,32 @@ export class F1Controller {
 
 function stripHud(text: string): string {
   return text.split(HUD_TAG).join('');
+}
+
+const UPDATE_BLOCK = /<F1M_UPDATE>[\s\S]*?<\/F1M_UPDATE>/gi;
+
+/**
+ * 「继续生成」后的文本相对续写前原文新增的部分；对不上时返回 null。
+ * 酒馆续写时以「发给 AI 的版本」为前缀（指令块、占位符已被正则去掉，空白也可能变化），
+ * 所以按「去掉指令块与空白后的正文」逐字对齐。
+ */
+export function continuationSuffix(original: string, current: string): string | null {
+  const o = stripHud(original).trimEnd();
+  const c = stripHud(current);
+  if (c.startsWith(o)) return c.slice(o.length);
+  const target = o.replace(UPDATE_BLOCK, '').replace(/\s+/g, '');
+  let k = 0;
+  let i = 0;
+  while (i < c.length && k < target.length) {
+    if (/\s/.test(c[i])) {
+      i++;
+      continue;
+    }
+    if (c[i] !== target[k]) return null;
+    i++;
+    k++;
+  }
+  return k === target.length ? c.slice(i) : null;
 }
 
 /** 取出待叙述事件（标记为已叙述），返回它们的标题 */

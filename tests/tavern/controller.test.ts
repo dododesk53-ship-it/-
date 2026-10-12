@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { F1Controller, HUD_TAG, INJECT_ID } from '../../src/tavern/controller';
+import { continuationSuffix, F1Controller, HUD_TAG, INJECT_ID } from '../../src/tavern/controller';
 import { PTR, STORE_KEY } from '../../src/tavern/store';
 import { FakeTavern } from './fakeEnv';
 
@@ -217,6 +217,7 @@ describe('流式生成、继续生成与重新开局', () => {
     expect(s.drivers.c1.morale).toBeCloseTo(m1, 1); // 已达本条消息的心态上限
     expect(s.teams.team_c.mediaReputation).toBeCloseTo(media0 + 2, 1);
     const text = env.messages[id].swipes[0];
+    expect(text.match(/<F1M_UPDATE>/g)).toHaveLength(2); // 酒馆去掉的原指令块被放回
     expect(text.split(HUD_TAG)).toHaveLength(2);
     expect(text.trimEnd().endsWith(HUD_TAG)).toBe(true);
     expect(env.toasts.some(([, m]) => m.includes('面板操作'))).toBe(false);
@@ -231,8 +232,19 @@ describe('流式生成、继续生成与重新开局', () => {
     await env.userSays('谈谈');
     const media0 = ctrl.stateAt()!.teams.team_c.mediaReputation;
     await env.aiReplies(`第一段。${update(['{"op":"media","delta":2}'])}`);
-    await env.aiStreams(`第二段。${update(['{"op":"media","delta":3}'])}`, 'continue');
+    const id = await env.aiStreams(`第二段。${update(['{"op":"media","delta":3}'])}`, 'continue');
     expect(ctrl.stateAt()!.teams.team_c.mediaReputation).toBeCloseTo(media0 + 5, 1);
+    expect(env.messages[id].swipes[0].match(/<F1M_UPDATE>/g)).toHaveLength(2);
+    // 之后编辑本楼重新结算时，原指令仍然在文本里
+    await env.editMessage(id, env.messages[id].swipes[0].replace('"delta":3', '"delta":4'));
+    expect(ctrl.stateAt()!.teams.team_c.mediaReputation).toBeCloseTo(media0 + 6, 1);
+  });
+
+  it('续写对齐：忽略被去掉的指令块、占位符与空白变化', () => {
+    const original = `第一段。\n${update(['{"op":"media","delta":2}'])}\n\n${HUD_TAG}`;
+    expect(continuationSuffix(original, '第一段。 接着说。')).toBe(' 接着说。');
+    expect(continuationSuffix(original, `${original}接着`)).toBe('\n\n接着');
+    expect(continuationSuffix(original, '完全不同的文本')).toBeNull();
   });
 
   it('AI 回复没有指令、本楼随后有面板操作时，编辑回复不会冲掉面板操作', async () => {

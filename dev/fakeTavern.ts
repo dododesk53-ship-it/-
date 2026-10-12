@@ -112,8 +112,10 @@ export class FakeTavern implements TavernEnv {
     await this.fire(this.events.GENERATION_AFTER_COMMANDS, type, {}, false);
     let id = this.messages.length - 1;
     if (type === 'continue') {
+      // 酒馆以「发给 AI 的版本」为前缀拼接续写：不发给 AI 的正则已去掉指令块与状态条占位符
       const m = this.messages[id];
-      m.swipes[m.swipe_id] += text;
+      const prompted = m.swipes[m.swipe_id].replace(/<F1M_UPDATE>[\s\S]*?<\/F1M_UPDATE>/gi, '').split('<F1M_HUD/>').join('').trim();
+      m.swipes[m.swipe_id] = prompted + text;
     } else {
       this.messages.push({ role: 'assistant', swipes: ['...'], swipe_id: 0, variables: [{}] });
       id = this.messages.length - 1;

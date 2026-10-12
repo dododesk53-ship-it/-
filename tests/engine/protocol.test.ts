@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyAiCommands, describeLog, parseAiCommands, stripAiCommands } from '../../src/engine/protocol';
 import { buildStatePrompt } from '../../src/engine/prompt';
+import { carRatings, disclosedPerf } from '../../src/engine/ratings';
 import { buildView } from '../../src/engine/view';
 import { act, advanceUntil, newTestGame } from '../helpers';
 
@@ -108,6 +109,13 @@ describe('提示词', () => {
     const high = variant(100);
     expect(buildStatePrompt(low)).toBe(buildStatePrompt(high));
     expect(JSON.stringify(buildView(low))).toBe(JSON.stringify(buildView(high)));
+    // 直接检查评分口径：公开口径用预估区间中值，真实口径（只给模拟用）随真实性能变化
+    const rate = (st: typeof s, basis: 'true' | 'disclosed') => carRatings(st.teams.team_c, st.teams.team_c.cars[0], st.rules, basis);
+    expect(rate(low, 'disclosed')).toEqual(rate(high, 'disclosed'));
+    expect(rate(low, 'true')).not.toEqual(rate(high, 'true'));
+    const lowSpec = low.teams.team_c.parts.floor.specs.find(x => x.id === spec.id)!;
+    expect(disclosedPerf(lowSpec)).toBeCloseTo((spec.expected![0] + spec.expected![1]) / 2, 1);
+    expect(disclosedPerf({ ...lowSpec, verified: true })).toBe(1);
   });
 
   it('正赛前不会泄露正赛天气', () => {
