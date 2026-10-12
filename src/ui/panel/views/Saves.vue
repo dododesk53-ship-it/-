@@ -27,8 +27,8 @@ async function restore(r: RevisionInfo) {
 
 async function save() {
   if (!settings.value) return;
-  settings.value = await call(a => a.setSettings({ ...settings.value! }), false);
-  toast('ok', '设置已保存');
+  const saved = await call(a => a.setSettings({ ...settings.value! }), false);
+  if (saved) toast('ok', '设置已保存');
   load();
 }
 

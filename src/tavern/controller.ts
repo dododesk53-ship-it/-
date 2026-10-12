@@ -27,7 +27,7 @@ import type { Action, Ambition, DataIssue, DriverAttr, FacilityType, GameState }
 import { hashString, money, round1 } from '../engine/util';
 import { buildView, type GameView } from '../engine/view';
 import type { TavernEnv } from './env';
-import { AI_PTR, PTR, SaveStore, type RevisionInfo } from './store';
+import { AI_PTR, GAME_PTR, PTR, SaveStore, type RevisionInfo } from './store';
 
 export const HUD_TAG = '<F1M_HUD/>';
 export const DATA_PREFIX = '[F1M数据]';
@@ -97,6 +97,8 @@ export class F1Controller {
   settings: Settings = { ...DEFAULT_SETTINGS };
   data: (NormalizeResult & { canStart: boolean; origin: string; entries: string[] }) | null = null;
   private busy = false;
+  /** 「继续生成」开始时被续写楼层的原文（用于只结算新续写的部分） */
+  private continuing: { floor: number; text: string } | null = null;
   private listeners = new Set<(reason: string) => void>();
 
   constructor(private env: TavernEnv) {
@@ -448,14 +450,18 @@ export class F1Controller {
   onChatChanged(): void {
     this.store.load();
     this.data = null;
+    this.continuing = null;
     this.env.uninject(INJECT_ID);
     this.notify('chat_changed');
   }
 
-  onGenerationStart(type: string, _dryRun?: boolean): void {
+  onGenerationStart(type: string, dryRun?: boolean): void {
     const last = this.latestFloor();
     let floor = last;
     const lastMsg = this.env.getMessage(last);
+    if (!dryRun) {
+      this.continuing = type === 'continue' && lastMsg?.role === 'assistant' ? { floor: last, text: lastMsg.message ?? '' } : null;
+    }
     if (type === 'swipe' || (type === 'regenerate' && lastMsg?.role === 'assistant')) floor = last - 1;
     const st = this.settings.inject ? this.store.resolve(floor) : null;
     if (!st) {
@@ -466,6 +472,10 @@ export class F1Controller {
     this.env.inject(INJECT_ID, prompt, this.settings.injectDepth, this.settings.injectRole, this.settings.scanWorldInfo);
   }
 
+  /**
+   * 兜底结算：酒馆在流式生成被中断/出错（如 swipe、continue）时可能不发 MESSAGE_RECEIVED。
+   * 空回复（例如在第一个字之前就停止生成留下的空楼层）不会被结算，见 processAssistantMessageInner。
+   */
   async onGenerationEnded(): Promise<void> {
     const last = this.latestFloor();
     const msg = this.env.getMessage(last);
@@ -501,13 +511,24 @@ export class F1Controller {
     if (!msg || msg.role !== 'assistant') return;
     const vars = this.env.getMessageVars(id);
     const text = msg.message ?? '';
-    const hash = hashString(text.split(HUD_TAG).join('').trim());
+    const body = stripHud(text);
+    // 空回复（在第一个字之前停止生成留下的空楼层）：不结算、不消耗待叙述事件、不加状态条
+    if (!body.trim()) return;
+    const hash = hashString(body.trim());
     if (!opts.force && vars.f1m_hash === hash) {
       await this.ensureHud(id, text);
       return;
     }
-    // 本楼在 AI 结算之后已有面板操作：不重算，避免冲掉玩家的操作
-    if (!opts.force && typeof vars[PTR] === 'string' && typeof vars[AI_PTR] === 'string' && vars[PTR] !== vars[AI_PTR]) {
+    // 本楼在 AI 结算之后已有面板操作：不从上一楼重算，避免冲掉玩家的操作
+    if (!opts.force && typeof vars[PTR] === 'string' && vars[PTR] !== vars[AI_PTR]) {
+      const cont = this.continuing;
+      const original = cont && cont.floor === id ? stripHud(cont.text).trimEnd() : null;
+      if (original !== null && body.startsWith(original)) {
+        // 继续生成：只把新续写部分的指令结算到本楼当前状态上
+        this.continuing = null;
+        await this.settleContinuation(id, text, hash, original, body.slice(original.length));
+        return;
+      }
       this.store.patchFloorVars(id, { f1m_hash: hash });
       this.env.toast('warning', '本楼已有面板操作，修改后的 AI 指令没有重新结算');
       return;
@@ -520,16 +541,11 @@ export class F1Controller {
     const { commands, errors } = parseAiCommands(text);
     const next = base.state;
     const logs = applyAiCommands(next, commands, { messageId: id });
-    const narrated = next.narration.map(e => e.title);
-    if (next.narration.length) {
-      next.narrated = next.narration;
-      next.narration = [];
-    }
-    const changes = logs.map(l => describeLog(next, l));
-    if (errors.length) changes.push(...errors.slice(0, 3).map(e => `✗ ${e}`));
+    const narrated = takeNarration(next);
+    const changes = describeChanges(next, logs, errors);
     if (logs.length === 0 && narrated.length === 0) {
       // 无状态变化：不生成新版本，清掉可能残留的旧指针（例如重新编辑去掉了指令）
-      this.store.patchFloorVars(id, { [PTR]: undefined, [AI_PTR]: undefined, f1m_hash: hash, f1m_changes: changes, f1m_narrated: [] });
+      this.store.patchFloorVars(id, { [PTR]: undefined, [AI_PTR]: undefined, [GAME_PTR]: undefined, f1m_hash: hash, f1m_changes: changes, f1m_narrated: [] });
     } else {
       this.store.commit(next, {
         floor: id,
@@ -543,6 +559,36 @@ export class F1Controller {
     this.notify('ai');
   }
 
+  /**
+   * 本楼已有面板操作时的「继续生成」：在本楼当前状态（含面板操作）上只结算续写部分。
+   * 原文里的指令只用来恢复本条消息的累计上限。f1m_ai_rev 保持不变，之后编辑本楼仍受面板操作保护。
+   */
+  private async settleContinuation(id: number, text: string, hash: string, original: string, suffix: string): Promise<void> {
+    const cur = this.store.resolve(id);
+    const vars = this.env.getMessageVars(id);
+    if (!cur) return;
+    const { commands, errors } = parseAiCommands(suffix);
+    const next = cur.state;
+    const logs = applyAiCommands(next, commands, { messageId: id, prior: parseAiCommands(original).commands });
+    const narrated = takeNarration(next);
+    const changes = [...(Array.isArray(vars.f1m_changes) ? vars.f1m_changes : []), ...describeChanges(next, logs, errors)];
+    const allNarrated = [...(Array.isArray(vars.f1m_narrated) ? vars.f1m_narrated : []), ...narrated];
+    if (logs.length === 0 && narrated.length === 0) {
+      this.store.patchFloorVars(id, { f1m_hash: hash, f1m_changes: changes });
+    } else {
+      this.store.commit(next, {
+        floor: id,
+        kind: 'ai',
+        label: `第 ${id} 楼继续生成结算${logs.length ? `（${logs.filter(l => l.ok).length} 条指令）` : ''}`,
+        parent: cur.rev.id,
+        extraVars: { [AI_PTR]: vars[AI_PTR], f1m_hash: hash, f1m_changes: changes, f1m_narrated: allNarrated },
+      });
+    }
+    // 续写会把原来的占位符留在正文中间：移到末尾
+    await this.ensureHud(id, text.trimEnd().endsWith(HUD_TAG) ? text : stripHud(text));
+    this.notify('ai');
+  }
+
   private async ensureHud(id: number, text: string): Promise<void> {
     if (!this.settings.hudEnabled || text.includes(HUD_TAG)) return;
     try {
@@ -551,6 +597,26 @@ export class F1Controller {
       console.warn('[F1M] 无法追加状态条占位符', e);
     }
   }
+}
+
+function stripHud(text: string): string {
+  return text.split(HUD_TAG).join('');
+}
+
+/** 取出待叙述事件（标记为已叙述），返回它们的标题 */
+function takeNarration(state: GameState): string[] {
+  const titles = state.narration.map(e => e.title);
+  if (state.narration.length) {
+    state.narrated = state.narration;
+    state.narration = [];
+  }
+  return titles;
+}
+
+function describeChanges(state: GameState, logs: ReturnType<typeof applyAiCommands>, errors: string[]): string[] {
+  const changes = logs.map(l => describeLog(state, l));
+  if (errors.length) changes.push(...errors.slice(0, 3).map(e => `✗ ${e}`));
+  return changes;
 }
 
 function isSimulation(a: Action): boolean {

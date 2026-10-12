@@ -15,6 +15,8 @@ import type { TavernEnv } from './env';
 export const STORE_KEY = 'f1m_store';
 export const PTR = 'f1m_rev';
 export const AI_PTR = 'f1m_ai_rev';
+/** 指针所属的对局 id：新开局/导入后，旧对局楼层上的指针不会被误认成新对局的版本 */
+export const GAME_PTR = 'f1m_gid';
 
 export type RevisionKind = 'new' | 'ai' | 'ui' | 'restore' | 'import';
 
@@ -161,20 +163,28 @@ export class SaveStore {
     return typeof p === 'string' ? p : null;
   }
 
-  /** 解析第 floor 楼（含）之前最近的有效版本（不解压） */
+  /**
+   * 解析第 floor 楼（含）之前最近的有效版本（不解压）。
+   * - 属于其他对局（新开局/导入之前）的指针视为「无存档」，不会显示新对局的状态。
+   * - 指向已被清理版本的指针退回到最早仍保留、且不晚于该楼层的版本。
+   */
   resolveRev(floor: number): { rev: StoredRevision; floor: number; fallback: boolean } | null {
     let sawDangling = false;
     for (let i = Math.min(floor, this.env.lastMessageId()); i >= 0; i--) {
-      const id = this.pointerAt(i);
+      const vars = this.env.getMessageVars(i);
+      const id = typeof vars[PTR] === 'string' ? (vars[PTR] as string) : null;
       if (!id) continue;
+      const gid = vars[GAME_PTR];
+      if (typeof gid === 'string' && gid !== this.data.gameId) return null;
       const rev = this.data.revisions[id];
       if (rev && rev.gameId === this.data.gameId) return { rev, floor: i, fallback: sawDangling };
+      if (rev) return null; // 旧存档（没有对局标记）里撞上了新对局的版本号
       sawDangling = true;
     }
     if (sawDangling && this.data.order.length) {
-      // 指针指向的版本已被清理：退回到最早仍保留的版本
+      // 指针指向的版本已被清理：退回到最早仍保留的版本（不能用比该楼层更晚的版本）
       const oldest = this.data.revisions[this.data.order[0]];
-      if (oldest) return { rev: oldest, floor: oldest.floor, fallback: true };
+      if (oldest && oldest.floor <= floor) return { rev: oldest, floor: oldest.floor, fallback: true };
     }
     return null;
   }
@@ -185,9 +195,9 @@ export class SaveStore {
     return r ? { ...r, state: this.stateOf(r.rev) } : null;
   }
 
-  /** 新开局：清空历史版本 */
+  /** 新开局：清空历史版本（版本号计数继续递增，避免与旧楼层上的指针重名） */
   reset(gameId: string): void {
-    this.data = { ...emptyStore(), gameId };
+    this.data = { ...emptyStore(), gameId, counter: this.data.counter };
     this.cache.clear();
   }
 
@@ -229,8 +239,13 @@ export class SaveStore {
       this.data.order.push(id);
     }
     this.cache.set(rev.id, JSON.parse(JSON.stringify(state)) as GameState);
-    const nextVars: Record<string, unknown> = { ...vars, [PTR]: rev.id, ...(info.extraVars ?? {}) };
-    if (info.kind === 'ai') nextVars[AI_PTR] = rev.id;
+    const nextVars: Record<string, unknown> = {
+      ...vars,
+      [PTR]: rev.id,
+      [GAME_PTR]: state.gameId,
+      ...(info.kind === 'ai' ? { [AI_PTR]: rev.id } : {}),
+      ...(info.extraVars ?? {}),
+    };
     this.env.setMessageVars(floor, nextVars);
     this.prune();
     this.save();

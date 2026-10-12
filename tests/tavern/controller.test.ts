@@ -174,6 +174,108 @@ describe('后端控制器（模拟酒馆环境）', () => {
   });
 });
 
+describe('流式生成、继续生成与重新开局', () => {
+  let env: FakeTavern;
+  let ctrl: F1Controller;
+  beforeEach(async () => {
+    ({ env, ctrl } = await setup());
+  });
+
+  it('流式生成按真实顺序（先 GENERATION_ENDED 后 MESSAGE_RECEIVED）只结算一次', async () => {
+    await env.userSays('鼓励 C2');
+    const m0 = ctrl.stateAt()!.drivers.c2.morale;
+    const id = await env.aiStreams(`好。${update(['{"op":"morale","driver":"c2","delta":3}'])}`);
+    expect(ctrl.stateAt()!.drivers.c2.morale).toBeCloseTo(Math.min(100, m0 + 3), 1);
+    expect(ctrl.stateAt()!.narration).toHaveLength(0);
+    expect(env.messages[id].swipes[0].split(HUD_TAG)).toHaveLength(2);
+    expect(ctrl.status().revisions).toBe(2);
+  });
+
+  it('在第一个字之前停止生成：空楼层不结算、不消耗待叙述事件、不加状态条', async () => {
+    await env.userSays('说点什么');
+    const pending = ctrl.stateAt()!.narration.length;
+    expect(pending).toBeGreaterThan(0);
+    const id = await env.aiStreams('');
+    expect(env.messages[id].swipes[0]).toBe('');
+    expect(env.messages[id].variables[0][PTR]).toBeUndefined();
+    expect(ctrl.stateAt()!.narration).toHaveLength(pending);
+    expect(ctrl.status().revisions).toBe(1);
+  });
+
+  it('本楼有面板操作后继续生成：只结算续写部分，保留面板操作，并沿用本条消息的累计上限', async () => {
+    await env.userSays('谈谈');
+    const limit = ctrl.stateAt()!.rules.aiLimits.morale;
+    const m0 = ctrl.stateAt()!.drivers.c1.morale;
+    const media0 = ctrl.stateAt()!.teams.team_c.mediaReputation;
+    const id = await env.aiReplies(`第一段。${update([`{"op":"morale","driver":"c1","delta":${-limit}}`])}`);
+    const m1 = ctrl.stateAt()!.drivers.c1.morale;
+    expect(m1).toBeCloseTo(Math.max(0, m0 - limit), 1);
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' })).ok).toBe(true);
+    await env.aiStreams(`第二段。${update([`{"op":"morale","driver":"c1","delta":${-limit}}`, '{"op":"media","delta":2}'])}`, 'continue');
+    const s = ctrl.stateAt()!;
+    expect(s.teams.team_c.projects).toHaveLength(1);
+    expect(s.drivers.c1.morale).toBeCloseTo(m1, 1); // 已达本条消息的心态上限
+    expect(s.teams.team_c.mediaReputation).toBeCloseTo(media0 + 2, 1);
+    const text = env.messages[id].swipes[0];
+    expect(text.split(HUD_TAG)).toHaveLength(2);
+    expect(text.trimEnd().endsWith(HUD_TAG)).toBe(true);
+    expect(env.toasts.some(([, m]) => m.includes('面板操作'))).toBe(false);
+    // 之后编辑本楼仍然受面板操作保护
+    await env.editMessage(id, `改写。${update(['{"op":"media","delta":-8}'])}`);
+    expect(ctrl.stateAt()!.teams.team_c.projects).toHaveLength(1);
+    expect(ctrl.stateAt()!.teams.team_c.mediaReputation).toBeCloseTo(media0 + 2, 1);
+    expect(env.toasts.some(([, m]) => m.includes('面板操作'))).toBe(true);
+  });
+
+  it('没有面板操作时继续生成会按全文重新结算', async () => {
+    await env.userSays('谈谈');
+    const media0 = ctrl.stateAt()!.teams.team_c.mediaReputation;
+    await env.aiReplies(`第一段。${update(['{"op":"media","delta":2}'])}`);
+    await env.aiStreams(`第二段。${update(['{"op":"media","delta":3}'])}`, 'continue');
+    expect(ctrl.stateAt()!.teams.team_c.mediaReputation).toBeCloseTo(media0 + 5, 1);
+  });
+
+  it('AI 回复没有指令、本楼随后有面板操作时，编辑回复不会冲掉面板操作', async () => {
+    await env.userSays('嗨');
+    await env.aiReplies('只是聊天。');
+    await env.userSays('再聊');
+    const id = await env.aiReplies('还是聊天。');
+    await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' });
+    await env.editMessage(id, `改过。${update(['{"op":"media","delta":-3}'])}`);
+    expect(ctrl.stateAt()!.teams.team_c.projects).toHaveLength(1);
+  });
+
+  it('重新开局后，旧对局的楼层不会显示新对局的状态', async () => {
+    await env.userSays('开始');
+    await ctrl.dispatch({ type: 'ADVANCE' });
+    await env.aiReplies(`好。${update(['{"op":"media","delta":1}'])}`);
+    await env.userSays('再来');
+    await env.aiReplies(`好。${update(['{"op":"media","delta":1}'])}`);
+    const oldFloor = 2;
+    expect(ctrl.stateAt(oldFloor)!.meta.playerTeamId).toBe('team_c');
+    await env.userSays('换个车队');
+    expect((await ctrl.newGame({ playerTeamId: 'team_a', seed: 7 })).ok).toBe(true);
+    expect(ctrl.stateAt()!.meta.playerTeamId).toBe('team_a');
+    expect(ctrl.stateAt(oldFloor)).toBeNull();
+    expect(ctrl.hud(oldFloor).hasGame).toBe(false);
+    // 新对局的版本号不会和旧楼层上的指针重名
+    const oldIds = env.messages.slice(0, -1).map(m => m.variables[0][PTR]).filter(Boolean);
+    expect(oldIds).not.toContain(env.messages.at(-1)!.variables[0][PTR]);
+    expect(ctrl.status().revisions).toBe(1);
+  });
+
+  it('导入存档后，旧楼层同样不会显示导入的状态', async () => {
+    const text = ctrl.exportSave()!;
+    await env.userSays('开始');
+    await ctrl.dispatch({ type: 'ADVANCE' });
+    await env.userSays('导入');
+    expect((await ctrl.importSave(text)).ok).toBe(true);
+    // 同一对局 id 的旧指针已失效，回退版本不能比请求的楼层更晚
+    expect(ctrl.stateAt(1)).toBeNull();
+    expect(ctrl.stateAt()!.season.phase).toBe('preseason');
+  });
+});
+
 describe('数据错误', () => {
   it('世界书没有数据条目时无法开局并给出原因', async () => {
     const env = new FakeTavern([]);

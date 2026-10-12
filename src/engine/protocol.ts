@@ -131,6 +131,11 @@ function resolveDriver(state: GameState, ref: string | undefined): string | null
 
 export interface ApplyContext {
   messageId: number | null;
+  /**
+   * 同一条消息里此前已经结算过的指令（例如「继续生成」前的原文）。
+   * 只用来恢复本条消息的累计上限与指令计数，不会再次作用到 state 上。
+   */
+  prior?: AiCommand[];
 }
 
 /**
@@ -138,14 +143,20 @@ export interface ApplyContext {
  * 同一条消息内对同一对象的累计变化也受上限约束。
  */
 export function applyAiCommands(state: GameState, commands: AiCommand[], ctx: ApplyContext): AiLogEntry[] {
+  const used: Record<string, number> = {};
+  const prior = ctx.prior ?? [];
+  if (prior.length) runCommands(JSON.parse(JSON.stringify(state)) as GameState, prior, ctx.messageId, used, 0);
+  return runCommands(state, commands, ctx.messageId, used, prior.length);
+}
+
+function runCommands(state: GameState, commands: AiCommand[], messageId: number | null, used: Record<string, number>, offset: number): AiLogEntry[] {
   const limits = state.rules.aiLimits;
   const logs: AiLogEntry[] = [];
-  const used: Record<string, number> = {};
   const team = state.teams[state.meta.playerTeamId];
   const at = stamp(state);
 
   const log = (e: Omit<AiLogEntry, 'at' | 'messageId'>) => {
-    const entry: AiLogEntry = { at, messageId: ctx.messageId, ...e };
+    const entry: AiLogEntry = { at, messageId, ...e };
     logs.push(entry);
     pushCapped(state.aiLog, entry, 30);
   };
@@ -160,7 +171,7 @@ export function applyAiCommands(state: GameState, commands: AiCommand[], ctx: Ap
 
   commands.forEach((cmd, idx) => {
     const reason = (cmd.reason ?? '').slice(0, 60);
-    if (idx >= limits.maxCommands) {
+    if (idx + offset >= limits.maxCommands) {
       log({ op: cmd.op, target: cmd.driver ?? '', requested: cmd.delta ?? null, applied: null, reason, ok: false, note: `超过单条消息 ${limits.maxCommands} 条指令上限` });
       return;
     }
