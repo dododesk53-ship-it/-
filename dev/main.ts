@@ -39,7 +39,7 @@ const panel = new PanelHost(document, panelHtml);
 w.F1Manager = createApi(ctrl, () => panel);
 
 // 开发页专用：给没有中文字体的截图环境加载 dev/public/cjk.ttf（文件不存在时自动忽略）
-const FONT_CSS = `@font-face{font-family:'Noto Sans CJK SC';src:url('${location.origin}/cjk.ttf');font-weight:100 900;font-style:normal}.mono{font-family:ui-monospace,Menlo,Consolas,'Noto Sans CJK SC',monospace!important}`;
+const FONT_CSS = `@font-face{font-family:'Noto Sans CJK SC';src:url('${location.origin}/cjk.ttf');font-weight:100 900;font-style:normal}@font-face{font-family:'Noto Sans CJK SC';src:url('${location.origin}/cjk.ttf');font-weight:100 900;font-style:italic}.mono{font-family:ui-monospace,Menlo,Consolas,'Noto Sans CJK SC',monospace!important}`;
 function injectFont(doc: Document | null): void {
   if (!doc?.head || doc.getElementById('dev-cjk')) return;
   const s = doc.createElement('style');
