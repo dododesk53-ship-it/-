@@ -87,13 +87,16 @@ async function narrate() {
         <button v-for="t in tabs" :key="t.id" :class="{ on: store.tab === t.id }" @click="store.tab = t.id">{{ t.label }}</button>
       </nav>
       <main class="content">
-        <Overview v-if="store.tab === 'overview'" />
-        <Weekend v-else-if="store.tab === 'weekend'" />
-        <Drivers v-else-if="store.tab === 'drivers'" />
-        <Car v-else-if="store.tab === 'car'" />
-        <Development v-else-if="store.tab === 'rnd'" />
-        <Standings v-else-if="store.tab === 'standings'" />
-        <Saves v-else-if="store.tab === 'saves'" />
+        <Saves v-if="store.tab === 'saves'" />
+        <!-- 被法拉利撤职后本局只读：禁用除存档页以外的所有操作控件 -->
+        <fieldset v-else class="readonly-lock" :disabled="!!view.ferrari?.dismissed">
+          <Overview v-if="store.tab === 'overview'" />
+          <Weekend v-else-if="store.tab === 'weekend'" />
+          <Drivers v-else-if="store.tab === 'drivers'" />
+          <Car v-else-if="store.tab === 'car'" />
+          <Development v-else-if="store.tab === 'rnd'" />
+          <Standings v-else-if="store.tab === 'standings'" />
+        </fieldset>
       </main>
     </template>
 
@@ -173,6 +176,12 @@ async function narrate() {
   flex: 1;
   overflow-y: auto;
   padding: 12px;
+}
+.readonly-lock {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
 }
 .toasts {
   position: fixed;

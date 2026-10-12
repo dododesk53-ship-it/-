@@ -35,7 +35,7 @@ async function start() {
       principalName: principal.value,
       difficulty: difficulty.value,
       randomness: randomness.value,
-      selectionReason: selectionReason.value.trim() || undefined,
+      selectionReason: selectionReason.value,
     }),
   );
   if (r?.ok) {

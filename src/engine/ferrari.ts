@@ -109,15 +109,18 @@ export function ferrariOnAllocation(state: GameState, favoredId: string, slighte
   return shiftFans(state, { [favoredId]: round1(amt * 0.5), [slightedId]: round1(-amt) }, '升级件分配');
 }
 
-/** 车队指令执行结果 */
-export function ferrariOnOrder(state: GameState, yieldedId: string, favoredId: string, complied: boolean): string {
-  if (!ferrariActive(state)) return '';
+/** 车队指令执行结果（粉丝反应写入新闻） */
+export function ferrariOnOrder(state: GameState, yieldedId: string, favoredId: string, complied: boolean): void {
+  if (!ferrariActive(state)) return;
   const amt = state.rules.ferrari.orderFans;
+  let text: string;
   if (complied) {
     shiftMedia(state, -1, '车队指令引发争议');
-    return shiftFans(state, { [yieldedId]: -amt, [favoredId]: round1(amt * 0.4) }, `${driverName(state, yieldedId)} 被要求让车`);
+    text = shiftFans(state, { [yieldedId]: -amt, [favoredId]: round1(amt * 0.4) }, `${driverName(state, yieldedId)} 被要求让车`);
+  } else {
+    text = shiftFans(state, { [yieldedId]: 1, [favoredId]: round1(-amt * 0.6) }, `${driverName(state, yieldedId)} 拒绝让车`);
   }
-  return shiftFans(state, { [yieldedId]: 1, [favoredId]: round1(-amt * 0.6) }, `${driverName(state, yieldedId)} 拒绝让车`);
+  if (text) addNews(state, '粉丝', text);
 }
 
 /** 法拉利媒体对正赛成绩的反应：基础变化 × 倍率 − 每站耐心消耗 */
@@ -163,8 +166,7 @@ export function ferrariAfterRace(state: GameState, result: RaceResult): void {
   // 队内对比：名次靠后一方的粉丝不满
   const [a, b] = entries;
   if (a && b && a.pos !== null && b.pos !== null) {
-    const ahead = a.pos < b.pos ? camps[0] : camps[1];
-    const behind = ahead === camps[0] ? camps[1] : camps[0];
+    const [ahead, behind] = a.pos < b.pos ? camps : [camps[1], camps[0]];
     changes[ahead] += amt;
     changes[behind] -= amt;
   }

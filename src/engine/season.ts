@@ -11,7 +11,7 @@ import { resetPuUsage, recordPuFit } from './powerunit';
 import { simulateRace, type RaceExtras } from './race';
 import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
 import type { Rng } from './rng';
-import type { Action, GameState, PartSpec, RaceResult, TeamState } from './types';
+import type { Action, CarState, DriverState, GameState, PartSpec, RaceResult, TeamState } from './types';
 import { clamp, deepClone, money, round1, round2 } from './util';
 import { createWeekend, currentRound, currentTrack, runPractice, runQualifying } from './weekend';
 
@@ -276,8 +276,7 @@ function applyRaceOutcome(state: GameState, result: RaceResult, extras: RaceExtr
       y.trust = round1(clamp(y.trust - (2 + y.ego / 25), 0, 100));
       f.morale = round1(clamp(f.morale + 2, 0, 100));
       addNews(state, '车手', `${y.name} 服从车队指令让车给 ${f.name}，但显然并不情愿。`);
-      const fans = ferrariOnOrder(state, y.id, f.id, true);
-      if (fans) addNews(state, '粉丝', fans);
+      ferrariOnOrder(state, y.id, f.id, true);
     } else {
       y.morale = round1(clamp(y.morale + 1, 0, 100));
       y.trust = round1(clamp(y.trust - 2, 0, 100));
@@ -288,8 +287,7 @@ function applyRaceOutcome(state: GameState, result: RaceResult, extras: RaceExtr
         team.mediaReputation = round1(clamp(team.mediaReputation - 2, 0, 100));
       }
       addNews(state, '车手', `${y.name} 无视车队指令拒绝让车给 ${f.name}，车库气氛紧张。`);
-      const fans = ferrariOnOrder(state, y.id, f.id, false);
-      if (fans) addNews(state, '粉丝', fans);
+      ferrariOnOrder(state, y.id, f.id, false);
     }
   }
 
@@ -567,6 +565,12 @@ export function startNextSeason(state: GameState, rng: Rng): Outcome {
   return ok(`${state.season.year} 赛季季前准备开始`);
 }
 
+/** 车手换到另一台车后，按那台车上的动力单元更新配额计数 */
+function syncPuAfterSeatChange(state: GameState, d: DriverState, car: CarState): void {
+  if (!d.puUsed) return resetPuUsage(state, d, car);
+  for (const [pt, spec] of Object.entries(car.fitted)) if (d.puPool?.[pt] && !d.puPool[pt].includes(spec)) recordPuFit(state, d.id, pt, spec);
+}
+
 /** 把一位车手换到某台车上（如伤病时启用替补） */
 export function swapDriver(state: GameState, teamId: string, slot: number, driverId: string): Outcome {
   const team = state.teams[teamId];
@@ -583,9 +587,10 @@ export function swapDriver(state: GameState, teamId: string, slot: number, drive
   car.driverId = driverId;
   if (prev && !other) state.drivers[prev].role = 'reserve';
   d.role = 'race';
-  if (!d.puUsed) resetPuUsage(state, d, car);
-  else for (const [pt, spec] of Object.entries(car.fitted)) if (d.puPool?.[pt] && !d.puPool[pt].includes(spec)) recordPuFit(state, driverId, pt, spec);
-  if (prev && !other && team.isPlayer) ferrariOnBench(state, prev, driverId);
+  // 两位正式车手对调时，双方都换到了另一台车上的动力单元
+  syncPuAfterSeatChange(state, d, car);
+  if (other && prev) syncPuAfterSeatChange(state, state.drivers[prev], other);
+  if (prev && !other) ferrariOnBench(state, prev, driverId);
   if (!state.standings.drivers[driverId]) state.standings.drivers[driverId] = deepClone(emptyStandings({ ...state, drivers: { [driverId]: d } }).drivers[driverId]);
   addNews(state, '车队', `${d.name} 将驾驶 ${slot} 号车${prev ? `，替换 ${driverName(state, prev)}` : ''}。`);
   return ok(`${d.name} 换到 ${slot} 号车`);

@@ -369,7 +369,7 @@ export function buildView(state: GameState): GameView {
     gameId: state.gameId,
     meta: state.meta,
     season: { ...state.season, rounds: state.calendar.length, phaseLabel: LABELS.phase[phase] },
-    next: nextActionFor(state),
+    next: state.ferrari?.dismissed ? null : nextActionFor(state),
     round:
       roundDef && track
         ? {

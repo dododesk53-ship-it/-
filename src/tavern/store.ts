@@ -9,6 +9,7 @@
  * - 同一楼层上连续的面板操作会合并成一个修订版本，避免版本爆炸。
  */
 import { compressToBase64, decompressFromBase64 } from 'lz-string';
+import { migrateState } from '../engine/migrate';
 import type { GameState } from '../engine/types';
 import type { TavernEnv } from './env';
 
@@ -92,7 +93,7 @@ export function encodeState(state: GameState): string {
 export function decodeState(data: string): GameState {
   const json = decompressFromBase64(data);
   if (!json) throw new Error('存档数据损坏，无法解压');
-  return JSON.parse(json) as GameState;
+  return migrateState(JSON.parse(json) as GameState);
 }
 
 export interface StoreOptions {

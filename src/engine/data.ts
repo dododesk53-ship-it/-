@@ -333,7 +333,7 @@ function normalizeRules(ctx: Ctx, patches: Array<{ source: string; data: unknown
     if (!rules.parts[pt]) {
       ctx.warn(`rules.puAllocation.${pt}`, `规则中没有零件类型「${pt}」，已忽略`);
       delete rules.puAllocation[pt];
-    } else if (typeof n !== 'number' || !Number.isInteger(n) || n < 1) {
+    } else if (!Number.isInteger(n) || n < 1) {
       ctx.err(`rules.puAllocation.${pt}`, '配额应为 ≥ 1 的整数');
       delete rules.puAllocation[pt];
     }

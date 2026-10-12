@@ -11,6 +11,12 @@ import { addNews, driverName } from './log';
 import type { CarState, DriverState, GameState, PartType } from './types';
 import { addGridPenalty } from './weekend';
 
+/** 本赛季最后一场正赛已经开始：配额将在新赛季重置，超额不再罚退到下一站（即下赛季首站） */
+function seasonOver(state: GameState): boolean {
+  const { phase, roundIndex } = state.season;
+  return phase === 'season_end' || (roundIndex >= state.calendar.length - 1 && (phase === 'race' || phase === 'post_race'));
+}
+
 /** 是否计入配额 */
 export function isPuPart(state: GameState, partType: PartType): boolean {
   return (state.rules.puAllocation[partType] ?? 0) > 0;
@@ -60,7 +66,7 @@ export function recordPuFit(
   const limit = state.rules.puAllocation[partType];
   if (used <= limit) return '';
   const grid = used === limit + 1 ? state.rules.puPenaltyFirst : state.rules.puPenaltyNext;
-  if (grid <= 0) return '';
+  if (grid <= 0 || seasonOver(state)) return '';
   const { added, thisRound } = addGridPenalty(state, driverId, grid, 99);
   const name = state.rules.parts[partType]?.name ?? partType;
   const text = `${driverName(state, driverId)} 启用本赛季第 ${used} 件${name}（配额 ${limit}），罚退 ${added} 位（${thisRound ? '本站' : '下一站'}生效）`;

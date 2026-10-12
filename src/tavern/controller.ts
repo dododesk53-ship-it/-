@@ -19,6 +19,7 @@ import {
   type ProjectPreview,
 } from '../engine/development';
 import { createGame, type NewGameOptions } from '../engine/newgame';
+import { migrateState } from '../engine/migrate';
 import { buildStatePrompt } from '../engine/prompt';
 import { applyAiCommands, describeLog, parseAiCommands } from '../engine/protocol';
 import { carRatings, driverOverall, moraleLabel, trackScore } from '../engine/ratings';
@@ -455,6 +456,7 @@ export class F1Controller {
     if (!state || state.schema !== 1 || !state.teams || !state.meta?.playerTeamId || !state.teams[state.meta.playerTeamId]) {
       return { ok: false, message: '存档格式不正确' };
     }
+    migrateState(state);
     this.store.reset(state.gameId);
     this.store.commit(state, { floor: Math.max(0, this.latestFloor()), kind: 'import', label: '导入存档', parent: null });
     this.notify('import');
