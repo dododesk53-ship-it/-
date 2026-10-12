@@ -183,6 +183,10 @@ async function narrate() {
   padding: 0;
   min-width: 0;
 }
+.readonly-lock:disabled :deep(:is(button, input, select, textarea)) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .toasts {
   position: fixed;
   right: 12px;
