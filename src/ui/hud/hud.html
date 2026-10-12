@@ -112,6 +112,13 @@
       (h.projects && h.projects.length ? '<span class="muted">研发：' + h.projects.map(function (p) { return esc(p.label) + ' ' + p.weeksLeft + '周'; }).join('，') + '</span>' : '') +
       (h.lastRace ? '<span class="muted">上一站：' + esc(h.lastRace) + '</span>' : '') +
       '</div>';
+    if (h.liveRace) {
+      var live = h.liveRace;
+      html += '<div class="row line"><span class="badge warn">LIVE · L' + esc(live.lap) + '/' + esc(live.totalLaps) + '</span>' +
+        (live.raceControl ? '<span class="badge warn">' + esc(String(live.raceControl).toUpperCase()) + '</span>' : '') +
+        (live.pendingDecision ? '<span class="badge warn">等待比赛决策</span>' : '') +
+        '<button data-tab="weekend">进入正赛指挥</button></div>';
+    }
     if (h.season.next && h.isLatest) {
       html += '<div class="row line"><span class="muted">下一步：</span><span>' + esc(h.season.next) + '</span></div>';
     }

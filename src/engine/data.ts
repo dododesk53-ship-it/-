@@ -36,13 +36,16 @@ export interface NormalizeResult {
   issues: DataIssue[];
 }
 
-const TOP_KEYS: Record<string, 'rules' | 'teams' | 'drivers' | 'tracks' | 'calendar'> = {
+const TOP_KEYS: Record<string, 'rules' | 'teams' | 'drivers' | 'staffCandidates' | 'tracks' | 'calendar'> = {
   rules: 'rules',
   规则: 'rules',
   teams: 'teams',
   车队: 'teams',
   drivers: 'drivers',
   车手: 'drivers',
+  staffCandidates: 'staffCandidates',
+  staff: 'staffCandidates',
+  自由员工: 'staffCandidates',
   tracks: 'tracks',
   赛道: 'tracks',
   calendar: 'calendar',
@@ -359,15 +362,19 @@ function normalizeStaff(ctx: Ctx, raw: unknown, path: string): Record<StaffRole,
   for (const role of STAFF_ROLES) {
     const r = obj[role];
     if (typeof r === 'number') {
-      out[role] = { name: '', skill: clamp(r, 1, 100), salary: 1 };
+      out[role] = { id: '', role, name: '', skill: clamp(r, 1, 100), salary: 1 };
       continue;
     }
     const m = asObject(r);
     if (r === undefined) ctx.warn(`${path}.${role}`, '未填写，已使用默认能力 60');
     out[role] = {
+      id: ctx.str(m, 'id', `${path}.${role}`),
+      role,
       name: ctx.str(m, 'name', `${path}.${role}`),
       skill: ctx.num(m, 'skill', `${path}.${role}`, { def: 60, min: 1, max: 100 }),
       salary: ctx.num(m, 'salary', `${path}.${role}`, { def: 1, min: 0 }),
+      contractStart: Math.round(ctx.num(m, 'contractStart', `${path}.${role}`, { def: 0 })),
+      contractEnd: Math.round(ctx.num(m, 'contractEnd', `${path}.${role}`, { def: 0 })),
     };
   }
   return out;
@@ -479,6 +486,7 @@ function normalizeDriver(ctx: Ctx, raw: unknown, index: number): DriverDef | nul
     fitness: ctx.num(raw, 'fitness', path, { def: 100, min: 0, max: 100 }),
     ego: ctx.num(raw, 'ego', path, { def: 50, min: 0, max: 100 }),
     salary: ctx.num(raw, 'salary', path, { def: 2, min: 0 }),
+    contractStart: Math.round(ctx.num(raw, 'contractStart', path, { def: 0 })),
     contractEnd: Math.round(ctx.num(raw, 'contractEnd', path, { def: 0 })),
     traits: ctx.strArr(raw, 'traits'),
     description: ctx.str(raw, 'description', path),
@@ -567,9 +575,10 @@ function mergeById<T extends { id: string }>(ctx: Ctx, list: Array<{ item: T; so
 export function normalizeDatabase(sources: RawSource[]): NormalizeResult & { canStart: boolean } {
   const ctx = new Ctx();
   const rulePatches: Array<{ source: string; data: unknown }> = [];
-  const rawLists: Record<'teams' | 'drivers' | 'tracks' | 'calendar', Array<{ raw: unknown; source: string }>> = {
+  const rawLists: Record<'teams' | 'drivers' | 'staffCandidates' | 'tracks' | 'calendar', Array<{ raw: unknown; source: string }>> = {
     teams: [],
     drivers: [],
+    staffCandidates: [],
     tracks: [],
     calendar: [],
   };
@@ -612,6 +621,16 @@ export function normalizeDatabase(sources: RawSource[]): NormalizeResult & { can
     ctx.source = r.source;
     const d = normalizeDriver(ctx, r.raw, i);
     if (d) driverItems.push({ item: d, source: r.source });
+  });
+  const staffCandidates: StaffMember[] = [];
+  rawLists.staffCandidates.forEach((r, i) => {
+    ctx.source = r.source;
+    const raw = asObject(r.raw);
+    const role = ctx.str(raw, 'role', `staffCandidates[${i}]`);
+    if (!(STAFF_ROLES as readonly string[]).includes(role)) { ctx.err(`staffCandidates[${i}].role`, '员工岗位无效'); return; }
+    const id = ctx.str(raw, 'id', `staffCandidates[${i}]`, { required: true });
+    if (!id) return;
+    staffCandidates.push({ id, role: role as StaffRole, name: ctx.str(raw, 'name', `staffCandidates[${i}]`, { def: id }), skill: ctx.num(raw, 'skill', `staffCandidates[${i}]`, { def: 60, min: 1, max: 100 }), salary: ctx.num(raw, 'salary', `staffCandidates[${i}]`, { def: 1, min: 0 }), contractStart: 0, contractEnd: 0 });
   });
   const trackItems: Array<{ item: TrackDef; source: string }> = [];
   rawLists.tracks.forEach((r, i) => {
@@ -675,7 +694,7 @@ export function normalizeDatabase(sources: RawSource[]): NormalizeResult & { can
   }
 
   const sourceNames = sources.map(s => s.name);
-  const body = { rules, teams, drivers, tracks, calendar: rounds };
+  const body = { rules, teams, drivers, staffCandidates, tracks, calendar: rounds };
   const db: Database = { ...body, sources: sourceNames, signature: hashString(JSON.stringify(body)) };
   const canStart = !ctx.issues.some(i => i.level === 'error');
   return { db, issues: ctx.issues, canStart };

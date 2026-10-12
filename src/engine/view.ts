@@ -46,6 +46,7 @@ import type {
 } from './types';
 import { round1 } from './util';
 import { currentRound } from './weekend';
+import { marketCloseBlockers } from './market';
 
 export interface PartView {
   type: string;
@@ -198,6 +199,21 @@ export function revealedWeather(w: WeekendState, phase: Phase, isCurrent: boolea
   };
 }
 
+export interface LiveRaceView {
+  id: string;
+  revision: number;
+  kind: 'race' | 'sprint';
+  completedLaps: number;
+  totalLaps: number;
+  stage: string;
+  raceControl: 'sc' | 'vsc' | null;
+  weather: { rain: number; surface: 'dry' | 'damp' | 'wet'; forecast: import('./types').RaceForecast };
+  timing: Array<{ driverId: string; teamId: string; pos: number | null; status: 'running' | 'dnf'; gap: string; tyre: string; tyreAge: number; pits: number }>;
+  playerCars: Array<{ driverId: string; tyre: string; tyreAge: number; damage: boolean; partial: boolean; energy: number; paceMode: string; energyMode: string }>;
+  events: Array<{ id: string; lap: number; type: string; text: string; drivers: string[]; key: boolean }>;
+  pendingDecision: { id: string; lap: number; reasons: string[]; eligibleDriverIds: string[]; expectedPitLoss: number } | null;
+}
+
 export interface WeekendView {
   roundIndex: number;
   isCurrent: boolean;
@@ -212,6 +228,19 @@ export interface WeekendView {
   sprint: RaceResult | null;
   qualifying: QualiResult | null;
   race: RaceResult | null;
+  /** Explicit public projection; never exposes trajectory, RNG, rival energy or plans. */
+  liveRace: LiveRaceView | null;
+}
+
+export interface MarketView {
+  revision: number;
+  window: { id: string; targetYear: number; status: string; aiResolved: boolean } | null;
+  closeBlockers: string[];
+  current: { raceSeats: Record<string, string | null>; reserveIds: string[]; staff: Record<string, string | null> } | null;
+  projected: { raceSeats: Record<string, string | null>; reserveIds: string[]; staff: Record<string, string | null> } | null;
+  drivers: Array<{ id: string; name: string; teamId: string | null; role: string; overall: number; salary: number; contractEnd: number; preference: { askingSalary: number; preferredYears: number; desiredStrength: number; preferredTeamId: string | null; acceptsReserve: boolean } }>;
+  staff: Array<{ id: string; name: string; role: string; skill: number; salary: number; contractEnd: number; preference: { askingSalary: number; preferredYears: number; desiredStrength: number; preferredTeamId: string | null } }>;
+  agreements: Array<{ personId: string; toTeamId: string; role: string; annualSalary: number; endYear: number }>;
 }
 
 export interface GameView {
@@ -247,6 +276,7 @@ export interface GameView {
   };
   calendar: Array<{ index: number; id: string; name: string; trackName: string; trackType: string; sprint: boolean; dateLabel: string; status: 'done' | 'current' | 'upcoming'; winner: string | null; playerBest: number | null }>;
   weekend: WeekendView | null;
+  market: MarketView;
   history: RoundSummary[];
   news: GameState['news'];
   narration: GameState['narration'];
@@ -390,6 +420,33 @@ function ferrariView(state: GameState): FerrariView | null {
   };
 }
 
+function marketView(state: GameState): MarketView {
+  const market = state.market ?? { version: 1 as const, revision: 0, freeStaff: {}, window: null, completed: [] };
+  const window = market.window;
+  const playerId = state.meta.playerTeamId;
+  const profile = (p: import('./types').CandidatePreference | undefined, salary: number, id: string) => p ?? { askingSalary: salary, preferredYears: 1, desiredStrength: 50, preferredTeamId: null, loyalty: 0, acceptsReserve: true };
+  return {
+    revision: market.revision,
+    window: window ? { id: window.id, targetYear: window.targetYear, status: window.status, aiResolved: window.aiResolved } : null,
+    closeBlockers: window ? marketCloseBlockers(state) : [],
+    current: window ? {
+      raceSeats: Object.fromEntries(state.teams[playerId].cars.map(c => [String(c.slot), c.driverId])),
+      reserveIds: Object.values(state.drivers).filter(d => d.teamId === playerId && d.role === 'reserve').map(d => d.id),
+      staff: Object.fromEntries(STAFF_ROLES.map(role => [role, state.teams[playerId].staff[role]?.id ?? null])),
+    } : null,
+    projected: window ? { ...window.projectedRosters[playerId], raceSeats: { ...window.projectedRosters[playerId].raceSeats }, reserveIds: [...window.projectedRosters[playerId].reserveIds], staff: { ...window.projectedRosters[playerId].staff } } : null,
+    drivers: Object.values(state.drivers).map(d => {
+      const p = profile(window?.candidateProfiles[d.id] ?? d.preference, d.salary, d.id);
+      return { id: d.id, name: d.name, teamId: d.teamId, role: d.role, overall: driverOverall(d), salary: d.salary, contractEnd: d.contractEnd, preference: { askingSalary: p.askingSalary, preferredYears: p.preferredYears, desiredStrength: p.desiredStrength, preferredTeamId: p.preferredTeamId, acceptsReserve: !!p.acceptsReserve } };
+    }),
+    staff: Object.values(market.freeStaff).map(s => {
+      const p = profile(window?.candidateProfiles[s.id!] ?? s.preference, s.salary, s.id!);
+      return { id: s.id!, name: s.name, role: s.role ?? '', skill: s.skill, salary: s.salary, contractEnd: s.contractEnd ?? 0, preference: { askingSalary: p.askingSalary, preferredYears: p.preferredYears, desiredStrength: p.desiredStrength, preferredTeamId: p.preferredTeamId } };
+    }),
+    agreements: (window?.agreements ?? []).filter(a => a.toTeamId === playerId || a.fromTeamId === playerId).map(a => ({ personId: a.personId, toTeamId: a.toTeamId, role: a.driverRole ?? a.staffRole ?? '', annualSalary: a.annualSalary, endYear: a.endYear })),
+  };
+}
+
 export function buildView(state: GameState): GameView {
   const rules = state.rules;
   const team = state.teams[state.meta.playerTeamId];
@@ -453,6 +510,7 @@ export function buildView(state: GameState): GameView {
   }
 
   const weekend = buildWeekendView(state);
+  const market = marketView(state);
 
   return {
     gameId: state.gameId,
@@ -560,6 +618,7 @@ export function buildView(state: GameState): GameView {
       };
     }),
     weekend,
+    market,
     history: state.history,
     news: [...state.news].reverse(),
     narration: state.narration,
@@ -617,6 +676,26 @@ function buildWeekendView(state: GameState): WeekendView | null {
       });
     }
   }
+  const live = w.liveRace;
+  const liveRace: LiveRaceView | null = !live
+    ? null
+    : (() => {
+        const running = live.order.map((id, index) => ({ id, index, car: live.cars[id] })).filter(x => !!x.car);
+        const leader = running[0]?.car;
+        const timing = [...running, ...Object.values(live.cars).filter(c => c.status === 'dnf').map(car => ({ id: car.driverId, index: -1, car }))].map(({ car, index }) => ({
+          driverId: car.driverId, teamId: car.teamId, pos: car.status === 'running' ? index + 1 : null, status: car.status,
+          gap: car.status === 'dnf' ? 'DNF' : index === 0 ? '领跑' : `+${Math.max(0, car.cumulativeTime - (leader?.cumulativeTime ?? car.cumulativeTime)).toFixed(1)}s`,
+          tyre: car.tyre, tyreAge: car.tyreAge, pits: car.pits,
+        }));
+        return {
+          id: live.id, revision: live.revision, kind: live.kind, completedLaps: live.completedLaps, totalLaps: live.totalLaps, stage: live.stage,
+          raceControl: live.scLeft > 0 ? 'sc' : live.vscLeft > 0 ? 'vsc' : null,
+          weather: { rain: live.rain, surface: live.surface, forecast: live.forecast }, timing,
+          playerCars: Object.values(live.cars).filter(c => c.player).map(c => ({ driverId: c.driverId, tyre: c.tyre, tyreAge: c.tyreAge, damage: c.damage > 0, partial: c.partial > 0, energy: c.energy, paceMode: c.plan.paceMode, energyMode: c.energyMode })),
+          events: live.events.slice(-20),
+          pendingDecision: live.pendingDecision ? { id: live.pendingDecision.id, lap: live.pendingDecision.lap, reasons: live.pendingDecision.reasons, eligibleDriverIds: live.pendingDecision.eligibleDriverIds, expectedPitLoss: track?.pitLoss ?? 0 } : null,
+        };
+      })();
   return {
     roundIndex: w.roundIndex,
     isCurrent,
@@ -631,5 +710,6 @@ function buildWeekendView(state: GameState): WeekendView | null {
     sprint: w.sprint,
     qualifying: w.qualifying,
     race: w.race,
+    liveRace,
   };
 }

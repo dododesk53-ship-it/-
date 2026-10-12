@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import Bar from '../components/Bar.vue';
+import MarketDesk from '../components/MarketDesk.vue';
 import { act, peek, signed, store } from '../bridge';
 import type { DriverAttr } from '../../../engine/types';
 
@@ -15,6 +16,7 @@ const attrs = computed(() => Object.entries(v.value.labels.driverAttr) as Array<
 const trainAttr = ref<Record<string, DriverAttr>>({});
 const swapTarget = ref<Record<string, number>>({});
 const canSwap = computed(() => ['preseason', 'pre_race', 'post_race'].includes(v.value.season.phase));
+const driverPage = ref<'team' | 'market'>('team');
 
 function trainPreview(id: string) {
   const attr = trainAttr.value[id] ?? 'pace';
@@ -32,6 +34,12 @@ async function setPriority(id: string | null) {
 
 <template>
   <div class="stack">
+    <div v-if="v.market.window" class="seg roster-tabs">
+      <button :class="{ on: driverPage === 'team' }" @click="driverPage = 'team'">本队阵容</button>
+      <button :class="{ on: driverPage === 'market' }" @click="driverPage = 'market'">车手市场 / 员工招聘</button>
+    </div>
+    <MarketDesk v-if="driverPage === 'market' && v.market.window" />
+    <template v-else>
     <div class="card stack-s">
       <h3>车队优先级</h3>
       <div class="small muted">
@@ -103,6 +111,7 @@ async function setPriority(id: string | null) {
         </div>
       </div>
     </div>
+    </template>
   </div>
 </template>
 

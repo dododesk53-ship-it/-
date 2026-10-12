@@ -8,8 +8,13 @@
 export class Rng {
   private s: number;
 
-  constructor(seed: number) {
-    this.s = seed >>> 0 || 0x9e3779b9;
+  constructor(seed: number, restore = false) {
+    this.s = restore ? seed >>> 0 : seed >>> 0 || 0x9e3779b9;
+  }
+
+  /** Restores an exact serialized state, including the valid uint32 value zero. */
+  static restore(state: number): Rng {
+    return new Rng(state, true);
   }
 
   get state(): number {

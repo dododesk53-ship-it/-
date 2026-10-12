@@ -6,10 +6,11 @@ import { LABELS } from './defaults';
 import { advanceWeeks, rankOfTeam, refreshAeroAllowance, type Outcome } from './development';
 import { charge, prizeFor, settleRace, income } from './finance';
 import { addNarration, addNews, driverName, playerTeam, teamName } from './log';
+import { closeMarket, openMarket } from './market';
 import { emptyStandings } from './newgame';
 import { ferrariAfterRace, ferrariMediaDelta, ferrariOnAllocation, ferrariOnBench, ferrariOnOrder } from './ferrari';
 import { resetPuUsage, recordPuFit } from './powerunit';
-import { simulateRace, type RaceExtras } from './race';
+import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, type RaceExtras } from './race';
 import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
 import type { Rng } from './rng';
 import type { Action, CarState, DriverState, GameState, PartSpec, RaceResult, TeamState } from './types';
@@ -25,6 +26,10 @@ export interface NextAction {
 }
 
 export function nextActionFor(state: GameState): NextAction | null {
+  const active = state.weekend?.liveRace;
+  // A generic advance must never silently consume a strategy window. The panel uses
+  // liveRace's session/revision/window tokens for the dedicated live controls.
+  if (active) return null;
   const isLast = state.season.roundIndex >= state.calendar.length - 1;
   const round = currentRound(state);
   const track = round ? state.tracks[round.trackId] : undefined;
@@ -54,6 +59,11 @@ export function nextActionFor(state: GameState): NextAction | null {
 
 export function startSeason(state: GameState, rng: Rng): Outcome {
   if (state.season.phase !== 'preseason') return fail('只能在季前阶段开始赛季');
+  if (state.market?.window?.status !== 'closed') {
+    retainUntouchedMarket(state);
+    const closed = closeMarket(state);
+    if (!closed.ok) return fail(closed.message);
+  }
   const gap = state.calendar[0]?.weeksGap ?? 0;
   advanceWeeks(state, gap, rng);
   state.season.phase = 'pre_race';
@@ -61,6 +71,20 @@ export function startSeason(state: GameState, rng: Rng): Outcome {
   addNews(state, '赛季', `${state.season.year} 赛季正式开始，首站：${track.name}。`);
   addNarration(state, 'season_start', '赛季开始', `季前准备结束（经过 ${gap} 周），车队抵达首站 ${track.name}（${track.type}）。`);
   return ok(`赛季开始，${gap} 周后抵达首站`);
+}
+
+/** Compatibility path for a window the player did not interact with at all. */
+function retainUntouchedMarket(state: GameState): void {
+  const pendingMarket = state.market?.window;
+  if (!pendingMarket || pendingMarket.agreements.length || pendingMarket.releases.length) return;
+  for (const [teamId, team] of Object.entries(state.teams)) {
+    const roster = pendingMarket.projectedRosters[teamId];
+    for (const car of team.cars) roster.raceSeats[String(car.slot)] = car.driverId;
+    roster.reserveIds = Object.values(state.drivers).filter(d => d.teamId === teamId && d.role === 'reserve').map(d => d.id);
+    for (const role of ['technicalDirector', 'aeroChief', 'raceEngineer', 'pitCrew', 'strategist'] as const) roster.staff[role] = team.staff[role].id ?? `${teamId}-${role}`;
+  }
+  pendingMarket.aiResolved = true;
+  pendingMarket.status = 'ai_resolved';
 }
 
 export function startWeekend(state: GameState, rng: Rng): Outcome {
@@ -92,22 +116,61 @@ export function doQualifying(state: GameState, rng: Rng, kind: 'qualifying' | 's
   return ok(`${LABELS.phase[kind]}结束，杆位：${driverName(state, res.order[0])}`);
 }
 
+/** Compatibility automatic finish. It resumes any paused matching session instead of rerolling it. */
 export function doRace(state: GameState, rng: Rng, kind: 'race' | 'sprint'): Outcome {
   if (state.season.phase !== kind || !state.weekend) return fail(`当前不是${LABELS.phase[kind]}阶段`);
-  if (kind === 'race') applyAllocationFairness(state);
-  const expected = expectedPositions(state);
-  const { result, extras } = simulateRace(state, rng, kind);
-  applyRaceOutcome(state, result, extras, expected, rng);
-  if (kind === 'race') {
-    state.weekend.race = result;
-    state.weekend.parcFerme = false;
-    state.season.phase = 'post_race';
-  } else {
-    state.weekend.sprint = result;
-    state.season.phase = 'qualifying';
+  let live = state.weekend.liveRace;
+  if (live && live.kind !== kind) return fail('另一场比赛正在进行，不能重新发车');
+  if (!live) {
+    if (kind === 'race') applyAllocationFairness(state);
+    live = createRaceSession(state, rng, kind, expectedPositions(state));
+    state.weekend.liveRace = live;
   }
+  while (live.stage !== 'finished') {
+    if (live.pendingDecision) {
+      const choices = Object.values(live.cars).filter(c => c.player && c.status === 'running').map(c => ({ driverId: c.driverId, pit: 'auto' as const }));
+      if (!applyRaceDecision(state, live, live.pendingDecision.id, choices)) return fail('自动策略无法处理当前决策窗口');
+    } else advanceRaceSession(state, live, 'next_decision');
+  }
+  return finalizeLiveRace(state, rng);
+}
+
+/** Creates an interactive session. Launch effects are applied only once. */
+export function startLiveRace(state: GameState, rng: Rng, kind: 'race' | 'sprint'): Outcome {
+  if (state.season.phase !== kind || !state.weekend) return fail(`当前不是${LABELS.phase[kind]}阶段`);
+  if (state.weekend.liveRace) return fail('比赛已经开始');
+  if (kind === 'race') applyAllocationFairness(state);
+  state.weekend.liveRace = createRaceSession(state, rng, kind, expectedPositions(state));
+  return ok(`${LABELS.phase[kind]}已发车，等待起跑策略确认`);
+}
+
+export function advanceLiveRace(state: GameState, rng: Rng, sessionId: string, revision: number, until: 'next_lap' | 'next_decision'): Outcome {
+  const live = state.weekend?.liveRace;
+  if (!live || live.id !== sessionId || live.revision !== revision) return fail('比赛状态已更新，请刷新后重试');
+  if (live.pendingDecision) return fail('请先确认当前策略决策');
+  advanceRaceSession(state, live, until);
+  live.revision++;
+  return live.stage === 'finished' ? finalizeLiveRace(state, rng) : ok(live.pendingDecision ? '比赛暂停，等待策略决策' : `已完成第 ${live.completedLaps} 圈`);
+}
+
+export function resolveLiveRaceDecision(state: GameState, rng: Rng, sessionId: string, revision: number, windowId: string, drivers: Parameters<typeof applyRaceDecision>[3], orders?: Parameters<typeof applyRaceDecision>[4]): Outcome {
+  const live = state.weekend?.liveRace;
+  if (!live || live.id !== sessionId || live.revision !== revision) return fail('比赛状态已更新，请刷新后重试');
+  if (!applyRaceDecision(state, live, windowId, drivers, orders)) return fail('策略决策无效或已过期');
+  return live.stage === 'finished' ? finalizeLiveRace(state, rng) : ok('策略已确认，将在下一未完成圈生效');
+}
+
+function finalizeLiveRace(state: GameState, rng: Rng): Outcome {
+  const live = state.weekend?.liveRace;
+  const completed = live && finishRaceSession(state, live);
+  if (!live || !completed) return fail('比赛尚未完成');
+  const { result, extras } = completed;
+  applyRaceOutcome(state, result, extras, live.expectedPositions, rng);
+  if (result.kind === 'race') { state.weekend!.race = result; state.weekend!.parcFerme = false; state.season.phase = 'post_race'; }
+  else { state.weekend!.sprint = result; state.season.phase = 'qualifying'; }
+  state.weekend!.liveRace = null;
   const winner = result.classification[0];
-  return ok(`${LABELS.phase[kind]}结束，冠军：${driverName(state, winner?.driverId)}`);
+  return ok(`${LABELS.phase[result.kind]}结束，冠军：${driverName(state, winner?.driverId)}`);
 }
 
 export function finishRound(state: GameState, rng: Rng): Outcome {
@@ -516,10 +579,17 @@ function seasonEnd(state: GameState): void {
     `${state.season.year} 赛季结束`,
     `车手冠军：${driverName(state, drivers[0])}；车队冠军：${teamName(state, teams[0])}。${pt.name} 最终排名第 ${pos}（目标第 ${pt.targetPosition}），${prizes.join('')}。董事会信心 ${pt.boardConfidence.toFixed(0)}。${fired ? '董事会对成绩极度不满，决定解除领队职务！' : ''}`,
   );
+  openMarket(state, state.season.year + 1);
 }
 
 export function startNextSeason(state: GameState, rng: Rng): Outcome {
   if (state.season.phase !== 'season_end') return fail('赛季尚未结束');
+  // Existing saves and callers that never touched the new market retain the
+  // historical rollover behaviour. Once a player makes any market decision,
+  // the normal explicit AI-resolution and roster-completeness gates apply.
+  retainUntouchedMarket(state);
+  const close = closeMarket(state);
+  if (!close.ok) return fail(close.message);
   const finalOrder = sortedTeams(state);
   state.season.year += 1;
   state.season.number += 1;
@@ -581,6 +651,7 @@ export function swapDriver(state: GameState, teamId: string, slot: number, drive
   const car = team?.cars.find(c => c.slot === slot);
   const d = state.drivers[driverId];
   if (!team || !car || !d) return fail('参数错误');
+  if ((state.market?.window?.status === 'open' || state.market?.window?.status === 'ai_resolved') && state.market.window.targetYear > state.season.year) return fail('合同市场开放时不能修改正式车位');
   if (d.teamId !== teamId) return fail('该车手不属于本车队');
   if (state.season.phase !== 'pre_race' && state.season.phase !== 'preseason' && state.season.phase !== 'post_race') {
     return fail('只能在比赛周末之外更换车手');

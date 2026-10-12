@@ -6,13 +6,30 @@ const props = defineProps<{ view: GameView }>();
 const mode = ref<'drivers' | 'teams'>('drivers');
 const open = ref(false);
 
+const live = computed(() => props.view.weekend?.liveRace ?? null);
 const race = computed(() => props.view.weekend?.race ?? props.view.weekend?.sprint ?? null);
-const isRace = computed(() => !!race.value && !!props.view.weekend?.isCurrent);
+const isRace = computed(() => (!!live.value || !!race.value) && !!props.view.weekend?.isCurrent);
 const playerDriverIds = computed(() => new Set(props.view.drivers.filter(d => d.isPlayerTeam).map(d => d.id)));
 const driverById = computed(() => new Map(props.view.drivers.map(d => [d.id, d])));
 const teamById = computed(() => new Map(props.view.teams.map(t => [t.id, t])));
 
 const rows = computed(() => {
+  if (live.value) {
+    return live.value.timing.map(entry => {
+      const driver = driverById.value.get(entry.driverId);
+      return {
+        key: entry.driverId,
+        pos: entry.pos ?? 'DNF',
+        code: driver?.short ?? driver?.name ?? entry.driverId,
+        color: driver?.teamColor ?? '#666',
+        me: playerDriverIds.value.has(entry.driverId),
+        value: entry.status === 'dnf' ? 'DNF' : entry.gap,
+        flag: entry.pits ? `PIT ${entry.pits}` : '',
+        tyre: props.view.labels.tyres[entry.tyre]?.short ?? entry.tyre,
+        dnf: entry.status === 'dnf',
+      };
+    });
+  }
   if (isRace.value && race.value) {
     return race.value.classification.map((entry, index) => {
       const driver = driverById.value.get(entry.driverId);
@@ -55,8 +72,9 @@ const rows = computed(() => {
   }));
 });
 
-const title = computed(() => (isRace.value ? (race.value?.kind === 'sprint' ? '冲刺赛' : '正赛') : '积分榜'));
+const title = computed(() => (isRace.value ? ((live.value?.kind ?? race.value?.kind) === 'sprint' ? '冲刺赛' : '正赛') : '积分榜'));
 const detail = computed(() => {
+  if (live.value) return `LIVE · L${live.value.completedLaps}/${live.value.totalLaps}`;
   if (isRace.value && race.value) return `${race.value.laps} 圈`;
   return props.view.season.roundIndex ? `第 ${props.view.season.roundIndex} 站后` : '赛季开始';
 });
@@ -80,7 +98,8 @@ const stripRows = computed(() => {
       <header class="tower-head">
         <div class="tower-title">
           <span>{{ title }}</span>
-          <span v-if="isRace" class="result-badge">完赛</span>
+          <span v-if="live" class="result-badge live-badge">LIVE · L{{ live.completedLaps }}/{{ live.totalLaps }}</span>
+          <span v-else-if="isRace" class="result-badge">完赛</span>
           <span v-else class="tiny muted">{{ detail }}</span>
         </div>
         <div v-if="!isRace" class="seg" role="tablist" aria-label="积分榜类型">
@@ -98,7 +117,7 @@ const stripRows = computed(() => {
           <span v-if="row.flag" class="t-flag" :class="{ dnf: row.dnf, fl: row.flag === 'FL', pit: row.flag.startsWith('PIT') }">{{ row.flag }}</span>
         </div>
       </div>
-      <footer class="tower-foot">{{ isRace ? '完赛顺序来自已完成的比赛模拟' : '比赛周末将显示本站分类' }}</footer>
+      <footer class="tower-foot">{{ live ? '实时顺序为当前圈末快照' : isRace ? '完赛顺序来自已完成的比赛模拟' : '比赛周末将显示本站分类' }}</footer>
     </aside>
     <button v-if="open" class="tower-backdrop" type="button" aria-label="关闭排名塔" @click="open = false"></button>
   </section>

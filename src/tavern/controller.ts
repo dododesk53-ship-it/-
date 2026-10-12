@@ -20,10 +20,11 @@ import {
 } from '../engine/development';
 import { createGame, type NewGameOptions } from '../engine/newgame';
 import { migrateState } from '../engine/migrate';
+import { previewContractOffer } from '../engine/market';
 import { buildStatePrompt } from '../engine/prompt';
 import { applyAiCommands, describeLog, parseAiCommands } from '../engine/protocol';
 import { carRatings, driverOverall, moraleLabel, trackScore } from '../engine/ratings';
-import type { Action, Ambition, DataIssue, DriverAttr, FacilityType, GameState } from '../engine/types';
+import type { Action, Ambition, ContractOfferTerms, DataIssue, DriverAttr, FacilityType, GameState, StaffRole } from '../engine/types';
 import { hashString, money, round1 } from '../engine/util';
 import { buildView, type GameView } from '../engine/view';
 import type { TavernEnv } from './env';
@@ -95,6 +96,8 @@ export interface HudView {
   drivers?: Array<{ id: string; name: string; morale: number; moraleLabel: string; trust: number; overall: number; points: number }>;
   projects?: Array<{ label: string; weeksLeft: number; progress: number }>;
   lastRace?: string | null;
+  /** Public only: current progress/control state, never hidden weather or strategy. */
+  liveRace?: { lap: number; totalLaps: number; raceControl: 'sc' | 'vsc' | null; pendingDecision: boolean } | null;
   /** 法拉利过渡领队考核（只有法拉利存档有） */
   ferrari?: { media: number; minMedia: number; warnMedia: number; fans: Array<{ name: string; value: number }>; gap: number; maxFanGap: number; warnFanGap: number; dismissed: string | null };
   changes: string[];
@@ -291,6 +294,14 @@ export class F1Controller {
         progress: Math.round(((p.weeksTotal - p.weeksLeft) / Math.max(1, p.weeksTotal)) * 100),
       })),
       lastRace,
+      liveRace: v.weekend?.liveRace
+        ? {
+            lap: v.weekend.liveRace.completedLaps,
+            totalLaps: v.weekend.liveRace.totalLaps,
+            raceControl: v.weekend.liveRace.raceControl,
+            pendingDecision: !!v.weekend.liveRace.pendingDecision,
+          }
+        : null,
       ferrari: v.ferrari
         ? {
             media: Math.round(v.ferrari.media),
@@ -326,6 +337,11 @@ export class F1Controller {
   previewDriverTraining(driverId: string, attr: DriverAttr) {
     const s = this.stateAt();
     return s ? previewDriverTraining(s, s.meta.playerTeamId, driverId, attr) : null;
+  }
+
+  previewContractOffer(terms: ContractOfferTerms, kind: 'driver' | 'staff', role?: StaffRole) {
+    const s = this.stateAt();
+    return s ? previewContractOffer(s, s.meta.playerTeamId, terms, kind, role) : null;
   }
 
   promptForLatest(): string | null {

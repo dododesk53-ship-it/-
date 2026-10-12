@@ -9,5 +9,9 @@ export { parseAiCommands, applyAiCommands, describeLog, stripAiCommands, UPDATE_
 export { previewProject, previewManufacture, previewDriverTraining, previewFacility } from './development';
 export { strategyOptions } from './strategy';
 export { nextActionFor } from './season';
+export { ensureMarket, openMarket, closeMarket, marketCloseBlockers, previewContractOffer, offerDriverContract, offerStaffContract, releasePerson } from './market';
+export { resolveAiMarket } from './market-ai';
+export { createRaceSession, advanceRaceSession, applyRaceDecision, finishRaceSession, simulateRace } from './race';
+export { createWeatherTrajectory, createForecast } from './raceWeather';
 export { Rng } from './rng';
 export { carRatings, driverOverall } from './ratings';

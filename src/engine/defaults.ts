@@ -26,6 +26,13 @@ export const DEFAULT_RULES: Rules = {
   costCap: 215,
   costCapIncludesSalaries: false,
   costCapIncludesFacilities: false,
+  market: {
+    minYears: 1,
+    maxYears: 4,
+    buyoutRate: 0.5,
+    acceptanceThreshold: 50,
+    payrollBufferWeeks: 4,
+  },
   prizeMoney: [140, 125, 112, 100, 90, 80, 72, 64, 56, 50, 45],
   pointBonus: 0.05,
   secPerCarPoint: 0.08,

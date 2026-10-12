@@ -13,7 +13,7 @@ export function costCapOf(team: TeamState, rules: Rules): number {
 }
 import { round2 } from './util';
 
-export type ChargeCategory = 'rnd' | 'manufacture' | 'repair' | 'operating' | 'salary' | 'facility' | 'misc';
+export type ChargeCategory = 'rnd' | 'manufacture' | 'repair' | 'operating' | 'salary' | 'facility' | 'buyout' | 'severance' | 'misc';
 
 export function isCapped(category: ChargeCategory, rules: Rules): boolean {
   switch (category) {
@@ -23,6 +23,8 @@ export function isCapped(category: ChargeCategory, rules: Rules): boolean {
     case 'operating':
       return true;
     case 'salary':
+    case 'buyout':
+    case 'severance':
       return rules.costCapIncludesSalaries;
     case 'facility':
       return rules.costCapIncludesFacilities;

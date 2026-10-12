@@ -16,6 +16,7 @@ import type { GameState } from './types';
 import { money, signed } from './util';
 import { revealedWeather } from './view';
 import { currentRound } from './weekend';
+import { marketCloseBlockers } from './market';
 
 export interface PromptOptions {
   /** 显示几条最近新闻 */
@@ -58,6 +59,12 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
       rw.race ? `正赛${LABELS.weather[rw.race]}` : `正赛降雨概率 ${pct(w.forecast.race)}`,
     ];
     L.push(`天气：${weatherBits.join('，')}`);
+    const live = w.liveRace;
+    if (live) {
+      const recent = live.events.slice(-3).map(e => `第${e.lap}圈 ${e.text}`).join('；');
+      const decision = live.pendingDecision ? `当前暂停等待领队确认：${live.pendingDecision.reasons.join('、')}。` : '比赛正在等待下一次引擎推进。';
+      L.push(`【实时比赛】${live.kind === 'sprint' ? '冲刺赛' : '正赛'}第 ${live.completedLaps}/${live.totalLaps} 圈，赛道${live.surface}，当前降雨强度 ${Math.round(live.rain * 100)}%，未来 ${live.forecast.horizonLaps} 圈预报仅供参考（降雨概率 ${pct(live.forecast.rainProbability)}，置信度 ${pct(live.forecast.confidence)}）。${recent ? `已发生：${recent}。` : ''}${decision}AI 只能叙述已发生事件或讨论选项，不能推进圈数、选择轮胎、改变天气或编造结果。`);
+    }
   }
 
   // 车队
@@ -68,6 +75,12 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
   L.push(
     `玩家：${state.meta.principalName}（{{user}}），${team.name} 车队领队 · 车队积分榜 P${rank}（${pts} 分${leader && leader !== team.id ? `，榜首 ${state.teams[leader].name} ${state.standings.teams[leader]?.points ?? 0} 分` : ''}）`,
   );
+  const market = state.market?.window;
+  if (market) {
+    const ownDeals = market.agreements.filter(a => a.toTeamId === team.id || a.fromTeamId === team.id);
+    const blockers = marketCloseBlockers(state);
+    L.push(`【合同市场】目标 ${market.targetYear} 赛季，状态 ${market.status}。${ownDeals.length ? `本队已确认：${ownDeals.map(a => `${a.personId}（${a.annualSalary.toFixed(2)}M/年，至${a.endYear}）`).join('、')}。` : '本队尚无新协议。'}${blockers.length ? `关闭前：${blockers.filter(x => x.includes(team.name) || x.startsWith('请先')).join('；')}。` : ''}AI 只能叙述已经确认的公开协议，不能谈判、承诺或改写合同。`);
+  }
   L.push(
     `资金 ${money(team.funds)} · 预算帽剩余 ${money(capRemaining(team, rules))}/${money(costCapOf(team, rules))} · 董事会信心 ${team.boardConfidence.toFixed(0)}（目标车队第 ${team.targetPosition}）· 媒体声誉 ${team.mediaReputation.toFixed(0)} · 员工士气 ${team.staffMorale.toFixed(0)}`,
   );

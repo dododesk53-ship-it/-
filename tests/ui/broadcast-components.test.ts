@@ -104,4 +104,28 @@ describe('转播界面组件', () => {
     expect(host.querySelector('.tower-open')).toBeNull();
     expect(host.querySelector('.tower-backdrop')).toBeNull();
   });
+
+  it('实时比赛时计时塔优先显示公开实时顺序，不混用完赛分类', () => {
+    const host = mount(TimingTower, {
+      view: {
+        season: { roundIndex: 1 },
+        player: { team: { id: 'ferrari' } },
+        teams: [{ id: 'ferrari', short: 'FER', name: '法拉利', color: '#e10600' }],
+        drivers: [{ id: 'leclerc', short: 'LEC', name: '夏尔·勒克莱尔', teamColor: '#e10600', isPlayerTeam: true }],
+        standings: { drivers: [{ pos: 3, driverId: 'leclerc', name: '夏尔·勒克莱尔', color: '#e10600', points: 15 }], teams: [] },
+        weekend: {
+          isCurrent: true,
+          race: { kind: 'race', laps: 57, fastestLap: null, classification: [{ driverId: 'leclerc', pos: 3, status: 'finished', gap: '+5.0', pits: 1, tyres: ['M'] }] },
+          sprint: null,
+          liveRace: { kind: 'race', completedLaps: 12, totalLaps: 57, timing: [{ driverId: 'leclerc', pos: 1, status: 'running', gap: '领跑', tyre: 'I', pits: 0 }] },
+        },
+        labels: { tyres: { I: { short: 'I' }, M: { short: 'M' } } },
+      },
+    });
+
+    expect(host.textContent).toContain('LIVE · L12/57');
+    expect(host.textContent).toContain('领跑');
+    expect(host.textContent).toContain('I');
+    expect(host.textContent).not.toContain('完赛顺序来自已完成的比赛模拟');
+  });
 });

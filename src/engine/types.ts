@@ -229,6 +229,8 @@ export interface Rules {
   costCapIncludesSalaries: boolean;
   /** 设施升级是否计入预算帽 */
   costCapIncludesFacilities: boolean;
+  /** 休赛期合同市场的公开规则。 */
+  market: MarketRules;
   /** 赛季末按车队排名发放奖金 (M$)，下标 0 = 冠军 */
   prizeMoney: number[];
   /** 每得 1 分的赞助奖金 (M$) */
@@ -287,6 +289,17 @@ export interface Rules {
   aduo: AduoRules;
 }
 
+export interface MarketRules {
+  minYears: number;
+  maxYears: number;
+  /** 剩余保障合同的公开买断/解约比例。 */
+  buyoutRate: number;
+  /** 报价可接受分数。 */
+  acceptanceThreshold: number;
+  /** 现金缓冲按多少周工资保留。 */
+  payrollBufferWeeks: number;
+}
+
 // ───────────────────────────── 静态数据（来自世界书） ─────────────────────────────
 
 export interface TrackDef {
@@ -324,10 +337,25 @@ export interface RoundDef {
 }
 
 export interface StaffMember {
+  /** 稳定身份；旧数据由迁移使用 teamId + role 补齐。 */
+  id?: string;
+  role?: StaffRole;
   name: string;
   skill: number;
   /** 年薪 (M$) */
   salary: number;
+  contractStart?: number;
+  contractEnd?: number;
+  preference?: CandidatePreference;
+}
+
+export interface CandidatePreference {
+  askingSalary: number;
+  preferredYears: number;
+  desiredStrength: number;
+  preferredTeamId: string | null;
+  loyalty: number;
+  acceptsReserve?: boolean;
 }
 
 export interface TeamDef {
@@ -374,7 +402,9 @@ export interface DriverDef {
   ego: number;
   /** 年薪 (M$) */
   salary: number;
+  contractStart?: number;
   contractEnd: number;
+  preference?: CandidatePreference;
   traits: string[];
   description: string;
 }
@@ -383,6 +413,8 @@ export interface Database {
   rules: Rules;
   teams: TeamDef[];
   drivers: DriverDef[];
+  /** 可选的自由员工池；缺失时由开局生成虚构候选人。 */
+  staffCandidates?: StaffMember[];
   tracks: TrackDef[];
   calendar: RoundDef[];
   /** 数据来源（世界书条目名） */
@@ -525,7 +557,9 @@ export interface DriverState {
   form: number;
   ego: number;
   salary: number;
+  contractStart?: number;
   contractEnd: number;
+  preference?: CandidatePreference;
   traits: string[];
   description: string;
   stats: DriverStats;
@@ -564,6 +598,8 @@ export interface Standings {
 
 // ───────────────────────────── 比赛周末 ─────────────────────────────
 
+export type EnergyMode = 'harvest' | 'balanced' | 'deploy';
+
 export interface DriverPlan {
   practiceProgram: PracticeProgram;
   qualiApproach: QualiApproach;
@@ -573,6 +609,8 @@ export interface DriverPlan {
   sprintTyre: Compound | 'auto';
   paceMode: PaceMode;
   pitTiming: PitTiming;
+  /** 能量模式；旧存档缺失时按 balanced 自动处理 */
+  energyMode?: EnergyMode;
   /** 安全车时是否机会进站 */
   scReaction: boolean;
 }
@@ -665,6 +703,8 @@ export interface ClassificationEntry {
 export interface RaceResult {
   kind: 'race' | 'sprint';
   weather: Weather;
+  /** 赛后实际天气摘要；旧结果可不含此字段。 */
+  weatherSummary?: 'dry' | 'wet' | 'mixed';
   laps: number;
   classification: ClassificationEntry[];
   events: RaceEvent[];
@@ -674,6 +714,112 @@ export interface RaceResult {
   safetyCars: number;
   /** 车队指令执行情况 */
   orderOutcomes: Array<{ lap: number; yielded: string; favored: string; complied: boolean }>;
+}
+
+export type LiveRaceStage = 'grid' | 'ready' | 'before_pit' | 'finished';
+export type RaceWindowReason = 'grid' | 'pit_opportunity' | 'weather_change' | 'sc' | 'vsc' | 'incident';
+
+export interface RaceForecast {
+  issuedLap: number;
+  horizonLaps: number;
+  rainProbability: number;
+  intensityRange: [number, number];
+  arrivalLaps: [number, number] | null;
+  confidence: number;
+}
+
+export interface LiveRaceCar {
+  driverId: string;
+  teamId: string;
+  slot: number;
+  player: boolean;
+  grid: number;
+  score: number;
+  skill: number;
+  consistency: number;
+  racecraft: number;
+  reliability: number;
+  wetSkill: number;
+  tyreFactor: number;
+  setupBonus: number;
+  pitCrewSkill: number;
+  plan: DriverPlan;
+  tyre: Compound;
+  tyreAge: number;
+  usedCompounds: Compound[];
+  plannedCompounds: Compound[];
+  stints: number[];
+  stintIndex: number;
+  pits: number;
+  cumulativeTime: number;
+  completedLaps: number;
+  status: 'running' | 'dnf';
+  reason: string;
+  bestLap: number | null;
+  damage: number;
+  partial: number;
+  repairPending: boolean;
+  energy: number;
+  energyMode: EnergyMode;
+  pendingPit: 'auto' | 'stay_out' | 'box' | null;
+}
+
+export interface RaceDamageRecord {
+  id: string;
+  incidentId: string;
+  driverId: string;
+  teamId: string;
+  slot: number;
+  cause: 'single_car' | 'collision';
+  severity: 'minor' | 'wing' | 'dnf';
+  affectedPartTypes: string[];
+  repairedInRace: boolean;
+}
+
+export interface RaceDecisionWindow {
+  id: string;
+  lap: number;
+  stage: LiveRaceStage;
+  reasons: RaceWindowReason[];
+  affectedDriverIds: string[];
+  eligibleDriverIds: string[];
+  observedEventIds: string[];
+}
+
+/** Fully serializable in-progress race state. Private trajectory and RNG stay out of views. */
+export interface LiveRaceState {
+  version: 1;
+  id: string;
+  kind: 'race' | 'sprint';
+  roundIndex: number;
+  totalLaps: number;
+  completedLaps: number;
+  lap: number;
+  stage: LiveRaceStage;
+  revision: number;
+  rngState: number;
+  weatherRngState: number;
+  forecastRngState: number;
+  expectedPositions: Record<string, number>;
+  cars: Record<string, LiveRaceCar>;
+  order: string[];
+  weatherTrajectory: number[];
+  weatherHistory: number[];
+  rain: number;
+  wetness: number;
+  surface: 'dry' | 'damp' | 'wet';
+  forecast: RaceForecast;
+  scLeft: number;
+  vscLeft: number;
+  safetyCars: number;
+  fastestLap: { driverId: string; time: number; lap: number } | null;
+  events: Array<RaceEvent & { id: string }>;
+  lapChart: Record<string, number[]>;
+  orderOutcomes: Array<{ lap: number; yielded: string; favored: string; complied: boolean }>;
+  orderCooldown: Record<string, number>;
+  teamOrders: TeamOrders;
+  pendingDecision: RaceDecisionWindow | null;
+  damageLedger: RaceDamageRecord[];
 }
 
 export interface WeekendState {
@@ -693,6 +839,8 @@ export interface WeekendState {
   sprint: RaceResult | null;
   qualifying: QualiResult | null;
   race: RaceResult | null;
+  /** 可暂停的正赛或冲刺赛；旧存档默认为 null。 */
+  liveRace: LiveRaceState | null;
 }
 
 // ───────────────────────────── 日志 ─────────────────────────────
@@ -787,6 +935,8 @@ export interface GameState {
   /** 车队显示顺序 */
   teamOrder: string[];
   drivers: Record<string, DriverState>;
+  /** 版本化的确定性休赛期市场。 */
+  market?: MarketState;
   standings: Standings;
   weekend: WeekendState | null;
   history: RoundSummary[];
@@ -804,6 +954,102 @@ export interface GameState {
   lastSeason: { year: number; driverChampion: string | null; constructorChampion: string | null; playerPosition: number | null } | null;
 }
 
+export interface MarketRoster {
+  raceSeats: Record<string, string | null>;
+  reserveIds: string[];
+  staff: Record<StaffRole, string | null>;
+}
+
+export interface MarketAgreement {
+  id: string;
+  personKind: 'driver' | 'staff';
+  personId: string;
+  fromTeamId: string | null;
+  toTeamId: string;
+  driverRole?: 'race' | 'reserve';
+  slot?: number;
+  staffRole?: StaffRole;
+  annualSalary: number;
+  startYear: number;
+  endYear: number;
+  buyout: number;
+  severance: number;
+  windowId: string;
+}
+
+export interface MarketEscrow {
+  id: string;
+  payerTeamId: string;
+  recipientTeamId: string | null;
+  recipientPersonId: string | null;
+  amount: number;
+  category: 'buyout' | 'severance';
+  capYear: number;
+  settled: boolean;
+}
+
+export interface MarketRelease {
+  id: string;
+  personKind: 'driver' | 'staff';
+  personId: string;
+  teamId: string;
+  effectiveYear: number;
+  severance: number;
+}
+
+export interface MarketWindow {
+  id: string;
+  targetYear: number;
+  status: 'open' | 'ai_resolved' | 'closed';
+  strengthByTeam: Record<string, number>;
+  candidateProfiles: Record<string, CandidatePreference>;
+  agreements: MarketAgreement[];
+  releases: MarketRelease[];
+  projectedRosters: Record<string, MarketRoster>;
+  escrow: MarketEscrow[];
+  aiResolved: boolean;
+}
+
+export interface MarketState {
+  version: 1;
+  revision: number;
+  freeStaff: Record<string, StaffMember>;
+  window: MarketWindow | null;
+  completed: Array<{ year: number; personId: string; fromTeamId: string | null; toTeamId: string | null; role: string; annualSalary: number }>;
+}
+
+export interface ContractOfferTerms {
+  windowId: string;
+  marketRevision: number;
+  personId: string;
+  annualSalary: number;
+  years: number;
+  role?: 'race' | 'reserve';
+  slot?: number;
+  replacePersonId?: string;
+}
+
+export interface ContractQuote {
+  windowId: string;
+  marketRevision: number;
+  terms: ContractOfferTerms;
+  candidateDecision: 'accept' | 'reject';
+  score: number;
+  threshold: number;
+  factors: Record<string, number>;
+  blockers: string[];
+  buyout: number;
+  severance: number;
+  cashDueNow: number;
+  annualPayrollBefore: number;
+  annualPayrollAfter: number;
+  guaranteedSalaryTotal: number;
+  capYear: number;
+  capCharge: number;
+  projectedCapRemaining: number;
+  replacedPersonId: string | null;
+}
+
 // ───────────────────────────── 动作 ─────────────────────────────
 
 export type Action =
@@ -815,8 +1061,16 @@ export type Action =
   | { type: 'RUN_SPRINT' }
   | { type: 'RUN_QUALIFYING' }
   | { type: 'RUN_RACE' }
+  | { type: 'START_RACE'; kind: 'race' | 'sprint' }
+  | { type: 'ADVANCE_RACE'; sessionId: string; expectedRevision: number; until: 'next_lap' | 'next_decision' }
+  | { type: 'SET_RACE_TACTICS'; sessionId: string; expectedRevision: number; drivers: Array<{ driverId: string; paceMode?: PaceMode; energyMode?: EnergyMode; pitTiming?: PitTiming }>; orders?: TeamOrders }
+  | { type: 'RESOLVE_RACE_DECISION'; sessionId: string; expectedRevision: number; windowId: string; drivers: Array<{ driverId: string; pit: 'auto' | 'stay_out' | 'box'; compound?: Compound; repairWing?: boolean; paceMode?: PaceMode; energyMode?: EnergyMode; pitTiming?: PitTiming }>; orders?: TeamOrders }
   | { type: 'FINISH_ROUND' }
   | { type: 'START_NEXT_SEASON' }
+  | { type: 'OFFER_DRIVER_CONTRACT'; windowId: string; marketRevision: number; driverId: string; annualSalary: number; years: number; role: 'race' | 'reserve'; slot?: number; replaceDriverId?: string }
+  | { type: 'OFFER_STAFF_CONTRACT'; windowId: string; marketRevision: number; candidateId: string; role: StaffRole; annualSalary: number; years: number; replaceStaffId?: string }
+  | { type: 'RELEASE_PERSON'; windowId: string; marketRevision: number; personKind: 'driver' | 'staff'; personId: string }
+  | { type: 'RESOLVE_AI_MARKET'; windowId: string; marketRevision: number }
   | { type: 'SET_PLAN'; driverId: string; plan: Partial<DriverPlan> }
   | { type: 'SET_TEAM_ORDERS'; orders: TeamOrders }
   | { type: 'SET_PRIORITY'; driverId: string | null }

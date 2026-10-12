@@ -70,6 +70,7 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
     sprint: null,
     qualifying: null,
     race: null,
+    liveRace: null,
   };
   // 保留上一站积累的罚退（例如 AI 叙事产生的罚退）
   const pending = state.flags.pendingPenalties;

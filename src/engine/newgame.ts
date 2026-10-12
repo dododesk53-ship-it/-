@@ -18,6 +18,7 @@ import { deepClone, round1 } from './util';
 import { aeroAllowance } from './development';
 import { recordAduoBaseline } from './aduo';
 import { initFerrari } from './ferrari';
+import { ensureMarket, openMarket } from './market';
 import { resetPuUsage } from './powerunit';
 
 export interface NewGameOptions {
@@ -175,6 +176,14 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
     lastSeason: null,
   };
   state.standings = emptyStandings(state);
+  ensureMarket(state);
+  for (const candidate of db.staffCandidates ?? []) {
+    if (!candidate.id || state.market!.freeStaff[candidate.id]) continue;
+    state.market!.freeStaff[candidate.id] = deepClone(candidate);
+  }
+  // A first-season window exposes the same deterministic roster/offer APIs as
+  // later offseasons; incumbent contracts are projected into it by default.
+  openMarket(state, state.season.year);
   recordAduoBaseline(state);
   for (const d of Object.values(drivers)) {
     resetPuUsage(state, d, d.teamId ? teams[d.teamId]?.cars.find(c => c.driverId === d.id) : undefined);

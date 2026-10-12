@@ -6,7 +6,7 @@
  * 返回的数据请自行 JSON 深拷贝后再放进响应式框架（跨 iframe 对象）。
  */
 import type { NewGameOptions } from '../engine/newgame';
-import type { Action, Ambition, DriverAttr, FacilityType } from '../engine/types';
+import type { Action, Ambition, ContractOfferTerms, DriverAttr, FacilityType, StaffRole } from '../engine/types';
 import { VERSION, type F1Controller, type Settings } from './controller';
 import type { PanelHost } from './panelHost';
 
@@ -22,6 +22,7 @@ export function createApi(ctrl: F1Controller, panel: () => PanelHost | null) {
     previewManufacture: (partType: string, specId: string, qty: number) => ctrl.previewManufacture(partType, specId, qty),
     previewFacility: (facility: FacilityType) => ctrl.previewFacility(facility),
     previewDriverTraining: (driverId: string, attr: DriverAttr) => ctrl.previewDriverTraining(driverId, attr),
+    previewContractOffer: (terms: ContractOfferTerms, kind: 'driver' | 'staff', role?: StaffRole) => ctrl.previewContractOffer(terms, kind, role),
     loadData: () => ctrl.loadData(),
     newGame: (opts: Partial<NewGameOptions> & { playerTeamId: string }) => ctrl.newGame(opts),
     listRevisions: () => ctrl.listRevisions(),

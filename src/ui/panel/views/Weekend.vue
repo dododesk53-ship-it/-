@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import Bar from '../components/Bar.vue';
 import LapChart from '../components/LapChart.vue';
 import Tyre from '../components/Tyre.vue';
+import LiveRaceDesk from '../components/LiveRaceDesk.vue';
 import { act, call, lapTime, pct, store } from '../bridge';
 import type { DriverPlan, PaceMode, PitTiming, PracticeProgram, QualiApproach, RaceResult, QualiResult } from '../../../engine/types';
 import type { WeekendDriverView } from '../../../engine/view';
@@ -100,6 +101,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
 
 <template>
   <div class="stack">
+    <LiveRaceDesk v-if="current && w && ['race', 'sprint'].includes(phase)" />
     <div class="card">
       <div class="stepper">
         <div v-for="(s, i) in steps" :key="s.id" class="step" :class="{ done: stepIndex > i || (!current && !!w), on: stepIndex === i }">

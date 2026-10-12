@@ -11,6 +11,7 @@
  */
 import { DEFAULT_RULES } from './defaults';
 import { resetPuUsage } from './powerunit';
+import { ensureMarket, openMarket } from './market';
 import type { GameState } from './types';
 import { deepClone } from './util';
 
@@ -30,6 +31,14 @@ function fillMissing(target: Record<string, unknown>, defaults: Record<string, u
 export function migrateState(state: GameState): GameState {
   if (!state?.rules || !state.teams) return state;
   if (state.ferrari === undefined) state.ferrari = null;
+  // Market migration intentionally precedes the modern-save early return below.
+  // It derives stable IDs/preferences without changing funds, results, or RNG.
+  const hadMarket = !!state.market;
+  ensureMarket(state);
+  if (!hadMarket && state.season?.phase === 'season_end') openMarket(state, state.season.year + 1);
+  // Live race is additive and must be initialized before the legacy early return.
+  // Never synthesize a session or consume RNG while loading an older save.
+  if (state.weekend && state.weekend.liveRace === undefined) state.weekend.liveRace = null;
   // ADUO（2026-10 新增）：旧存档没有厂商车队信息，按「各车队自行研发」处理
   if (state.rules.puAllocation && !state.rules.aduo) state.rules.aduo = deepClone(DEFAULT_RULES.aduo);
   state.aduo ??= { evaluations: [] };
