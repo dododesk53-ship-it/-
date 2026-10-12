@@ -16,6 +16,8 @@ import type {
 } from './types';
 import { deepClone, round1 } from './util';
 import { aeroAllowance } from './development';
+import { initFerrari } from './ferrari';
+import { resetPuUsage } from './powerunit';
 
 export interface NewGameOptions {
   playerTeamId: string;
@@ -25,6 +27,17 @@ export interface NewGameOptions {
   seed?: number;
   gameId?: string;
   now?: number;
+  /** 玩家自填的「为什么被选中」（可选，最多 300 字） */
+  selectionReason?: string;
+}
+
+export const SELECTION_REASON_MAX = 300;
+
+/** 清理玩家填写的入选理由：去掉首尾空白与控制字符，限制长度 */
+export function cleanSelectionReason(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  // eslint-disable-next-line no-control-regex
+  return raw.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim().slice(0, SELECTION_REASON_MAX);
 }
 
 export function emptyDriverStanding(rounds: number) {
@@ -54,6 +67,7 @@ export function emptyStandings(state: Pick<GameState, 'drivers' | 'teamOrder' | 
 export function createGame(db: Database, opts: NewGameOptions): GameState {
   const now = opts.now ?? Date.now();
   const gameId = opts.gameId ?? `g${now.toString(36)}`;
+  const selectionReason = cleanSelectionReason(opts.selectionReason);
   if (!db.teams.some(t => t.id === opts.playerTeamId)) {
     throw new Error(`找不到车队「${opts.playerTeamId}」`);
   }
@@ -107,6 +121,7 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
       staffMorale: 65,
       nextSeasonFocus: isPlayer ? 0 : 10,
       description: def.description,
+      ...(def.special ? { special: def.special } : {}),
     };
   }
 
@@ -131,6 +146,7 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
       randomness: opts.randomness ?? 'deterministic',
       dataSignature: db.signature,
       dataSources: [...db.sources],
+      ...(selectionReason ? { selectionReason } : {}),
     },
     rng: opts.seed ?? seedFrom(`${gameId}:${db.signature}`),
     seq: 0,
@@ -152,9 +168,40 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
     lastSeason: null,
   };
   state.standings = emptyStandings(state);
+  for (const d of Object.values(drivers)) {
+    resetPuUsage(state, d, d.teamId ? teams[d.teamId]?.cars.find(c => c.driverId === d.id) : undefined);
+  }
 
   const team = teams[opts.playerTeamId];
   const firstTrack = state.tracks[state.calendar[0]?.trackId]?.name ?? '首站';
+  const reason = state.meta.selectionReason?.replace(/[。．.!！?？\s]+$/, '');
+  initFerrari(state, team);
+  if (state.ferrari) {
+    const names = Object.keys(state.ferrari.fans).map(id => drivers[id].name).join('与');
+    const fr = rules.ferrari;
+    state.news.push({
+      id: 'n0',
+      at: 'S1R1',
+      tag: '车队',
+      text: `法拉利宣布 ${state.meta.principalName} 出任 ${state.season.year} 赛季过渡领队，接替被解职的弗雷德·瓦塞尔。`,
+    });
+    state.narration.push({
+      id: 'e0',
+      at: 'S1R1',
+      kind: 'new_game',
+      title: '临危受命：法拉利过渡领队',
+      detail: [
+        `2025 年底，由恩里科·瓜尔蒂耶里主导、为 2026 新规准备的钢制气缸盖发动机方案宣告失败，SF-25 的赛季也是一场灾难。约翰·埃尔坎随即解除了弗雷德·瓦塞尔的领队职务。`,
+        `内部继任人选还需要时间考察，埃尔坎把 ${state.season.year} 年定为过渡年，从外部招来一位过渡领队——${state.meta.principalName}。`,
+        reason ? `外界普遍认为 ${state.meta.principalName} 被选中的原因是：${reason}。` : '',
+        `埃尔坎的要求只有两条：稳住意大利媒体（媒体支持率 ${fr.startMedia}，低于 ${fr.minMedia} 即撤职），并让${names}两边的粉丝都满意（粉丝意见差距超过 ${fr.maxFanGap} 即撤职）。`,
+        `距离首站（${firstTrack}）还有 ${state.calendar[0]?.weeksGap ?? 0} 周。董事会对本赛季的目标是车队积分榜第 ${team.targetPosition} 名。`,
+      ]
+        .filter(Boolean)
+        .join(''),
+    });
+    return state;
+  }
   state.news.push({
     id: 'n0',
     at: 'S1R1',
@@ -166,7 +213,7 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
     at: 'S1R1',
     kind: 'new_game',
     title: '就任领队',
-    detail: `${state.meta.principalName} 刚刚正式出任 ${team.name} 的车队领队。距离首站（${firstTrack}）还有 ${state.calendar[0]?.weeksGap ?? 0} 周。董事会对本赛季的目标是车队积分榜第 ${team.targetPosition} 名。`,
+    detail: `${state.meta.principalName} 刚刚正式出任 ${team.name} 的车队领队。${reason ? `外界普遍认为 ${state.meta.principalName} 被选中的原因是：${reason}。` : ''}距离首站（${firstTrack}）还有 ${state.calendar[0]?.weeksGap ?? 0} 周。董事会对本赛季的目标是车队积分榜第 ${team.targetPosition} 名。`,
   });
   return state;
 }

@@ -11,6 +11,7 @@ const track = computed(() => v.value.round?.track ?? null);
 const myDrivers = computed(() => v.value.drivers.filter(d => d.isPlayerTeam && d.slot !== null).sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0)));
 const ranking = computed(() => [...v.value.teams].filter(t => t.trackScore !== null).sort((a, b) => (b.trackScore ?? 0) - (a.trackScore ?? 0)));
 const capPct = computed(() => 1 - p.value.capRemaining / v.value.rules.costCap);
+const fr = computed(() => v.value.ferrari);
 const demandLabels: Record<string, string> = { downforce: '下压力', efficiency: '气动效率', power: '动力', mechanical: '机械抓地' };
 
 function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
@@ -25,10 +26,33 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <Kpi label="资金" :value="money(team.funds)" :sub="`年薪支出 ${money(p.annualSalaries)}`" :tone="team.funds < 5 ? 'bad' : ''" />
       <Kpi label="预算帽剩余" :value="money(p.capRemaining)" :sub="`已用 ${pct(capPct)} / ${money(v.rules.costCap)}`" :tone="p.capRemaining < 10 ? 'warn' : ''" />
       <Kpi label="董事会信心" :value="Math.round(team.boardConfidence)" :sub="`目标：车队第 ${team.targetPosition}`" :tone="tone(team.boardConfidence)" />
-      <Kpi label="媒体声誉" :value="Math.round(team.mediaReputation)" />
+      <Kpi
+        :label="fr ? '媒体支持率' : '媒体声誉'"
+        :value="Math.round(team.mediaReputation)"
+        :sub="fr ? `低于 ${fr.minMedia} 撤职` : undefined"
+        :tone="fr ? (fr.media < fr.minMedia ? 'bad' : fr.media < fr.warnMedia ? 'warn' : 'ok') : ''"
+      />
       <Kpi label="员工士气" :value="Math.round(team.staffMorale)" :tone="tone(team.staffMorale)" />
       <Kpi label="风洞/CFD 时长" :value="`${team.aeroHours}h`" sub="每站按排名刷新" />
       <Kpi label="研发槽位" :value="`${p.projects.filter(x => x.kind === 'design').length}/${p.rndSlots}`" sub="进行中的设计项目" />
+    </div>
+
+    <div v-if="fr" class="card stack-s ferrari">
+      <div class="spread">
+        <h3>过渡领队考核 · 埃尔坎的两条底线</h3>
+        <span v-if="fr.dismissed" class="badge bad">已撤职</span>
+        <span v-else-if="fr.graceLeft > 0" class="badge">适应期：还剩 {{ fr.graceLeft }} 站</span>
+        <span v-else class="badge warn">考核中</span>
+      </div>
+      <div v-if="fr.dismissed" class="notice bad small">你已被解除过渡领队职务：{{ fr.dismissed }}。</div>
+      <Bar label="媒体支持率" :value="fr.media" :mark="fr.minMedia" :digits="0" color="#dc0000" :hint="`低于 ${fr.minMedia} 撤职，低于 ${fr.warnMedia} 告急`" />
+      <Bar v-for="f in fr.fans" :key="f.driverId" :label="`${f.name}粉丝`" :value="f.value" :digits="0" color="#f5c518" />
+      <Bar label="粉丝意见差距" :value="fr.gap" :mark="fr.maxFanGap" :digits="0" :color="fr.gap > fr.warnFanGap ? '#ff5a5a' : '#2fbf71'" :hint="`超过 ${fr.maxFanGap} 撤职`" />
+      <div class="tiny muted">升级件分配不均、指定优先车手、要求让车、成绩和退赛都会改变两边粉丝的意见。意大利媒体每站都会消耗一点耐心。</div>
+      <details v-if="fr.log.length" class="small">
+        <summary class="muted">最近变化</summary>
+        <div v-for="(l, i) in fr.log" :key="i" class="tiny">{{ l.at }} · {{ l.text }}</div>
+      </details>
     </div>
 
     <div class="grid g2">
@@ -104,6 +128,9 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
 </template>
 
 <style scoped>
+.ferrari {
+  border-left: 4px solid #dc0000;
+}
 .rank-row {
   display: flex;
   align-items: center;

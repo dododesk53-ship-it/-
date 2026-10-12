@@ -14,6 +14,7 @@ import {
   upgradeFacility,
   type Outcome,
 } from './development';
+import { ferrariOnPriority } from './ferrari';
 import { addNews, driverName } from './log';
 import { Rng } from './rng';
 import {
@@ -105,6 +106,7 @@ function setPriority(state: GameState, driverId: string | null): Outcome {
   }
   const msg = driverId ? `${driverName(state, driverId)} 被确立为车队优先车手` : '车队取消了优先车手，两位车手平等对待';
   addNews(state, '车队', `${msg}。`);
+  ferrariOnPriority(state, driverId);
   return ok(msg);
 }
 
@@ -118,8 +120,14 @@ function setTeamOrders(state: GameState, mode: string, favor: string | null): Ou
   return ok(`车队指令：${label}`);
 }
 
+/** 法拉利撤职后仍允许的操作（只读 / 清理） */
+const ALLOWED_AFTER_DISMISSAL = new Set(['CLEAR_NARRATION']);
+
 function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
   const tid = state.meta.playerTeamId;
+  if (state.ferrari?.dismissed && !ALLOWED_AFTER_DISMISSAL.has(action?.type)) {
+    return fail(`你已被解除法拉利过渡领队职务（${state.ferrari.dismissed}），本局结束。请在「存档」中读档或开始新游戏。`);
+  }
   switch (action.type) {
     case 'ADVANCE': {
       const next = nextActionFor(state);

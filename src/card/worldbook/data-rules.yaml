@@ -46,7 +46,22 @@ rules:
   #     unitCost: 0.8            # 额外生产一件的成本
   #     crashDamage: 0.3         # 撞车退赛时损毁概率
   #   power_unit:
-  #     developable: false       # 例：禁止研发动力单元
+  #     name: 内燃机             # 2026：取消 MGU-H，内燃机与电能约 50:50
+  #     developable: false       # 例：禁止研发内燃机
+  #   ers:
+  #     name: 能量回收系统       # 2026：MGU-K 提升到 350kW；影响动力和超车模式的收益
+
+  # ── 2026 赛事规则 ──
+  # qualiFinalists: 10        # Q3 保留几台车；其余平均分到 Q1/Q2 淘汰（22 台车 → 6/6/10）
+  # overtakeModeGap: 1        # 超车模式（取代 DRS）：落后前车不足该秒数时可获得额外电能
+  # overtakeModeBonus: 0.3    # 超车模式的基础优势（秒/次判定，随能量回收系统性能浮动）
+  # boostAttack: 0.12         # 「进攻」驾驶模式（Boost 按钮）进攻时的额外优势
+  # boostDefence: 0.1         # 前车同样处于「进攻」模式时可抵消的优势
+  # puAllocation:             # 每位车手每赛季可用的动力单元元件数（超出罚退）
+  #   power_unit: 4           #   内燃机（含涡轮、排气）
+  #   ers: 3                  #   能量回收系统（MGU-K、电池、控制电子）
+  # puPenaltyFirst: 10        # 第一次超出配额罚退位数
+  # puPenaltyNext: 5          # 之后每次超出罚退位数
 
   # ── 轮胎 ──
   # tyres:
@@ -72,3 +87,20 @@ rules:
   #   funds: 3
   #   fitness: 20
   #   penalty: 5
+  #   fans: 6                 # 法拉利粉丝意见（只在法拉利存档生效）
+
+  # ── 法拉利「过渡领队」特殊机制（只对 special: ferrari 的玩家车队生效）──
+  # ferrari:
+  #   startMedia: 45          # 开局媒体支持率
+  #   startFans: 50           # 开局两位车手的粉丝意见
+  #   minMedia: 20            # 媒体支持率低于该值 → 撤职
+  #   warnMedia: 30           # 媒体支持率低于该值 → 警告
+  #   maxFanGap: 35           # 两边粉丝意见差距超过该值 → 撤职
+  #   warnFanGap: 25          # 差距超过该值 → 警告
+  #   mediaPerRace: 1         # 每站正赛后媒体支持率固定下降（意大利媒体的耐心）
+  #   mediaResultMul: 1.5     # 成绩对媒体支持率的影响倍率
+  #   allocationFans: 3       # 升级件分配：两车差距每 1 分，吃亏一方粉丝 -3，另一方 +1.5
+  #   priorityFans: 6         # 指定优先车手：被选中一方 +6，另一方 -7.2
+  #   orderFans: 5            # 车队指令让车：让车一方粉丝 -5，受益一方 +2
+  #   resultFans: 1.5         # 正赛成绩（队内名次、领奖台、机械故障）对粉丝意见的影响单位
+  #   graceRounds: 2          # 首个赛季前几站是适应期：只警告、不撤职

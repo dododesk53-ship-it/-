@@ -27,6 +27,14 @@ function options(car: CarView, type: string): StockView[] {
   return p.value.stock.filter(s => s.partType === type && (s.count > 0 || s.fittedOn.includes(car.slot)));
 }
 
+/** 动力单元配额（按车手计） */
+function puOf(car: CarView) {
+  return v.value.drivers.find(d => d.id === car.driverId)?.pu ?? [];
+}
+function puCell(car: CarView, type: string) {
+  return puOf(car).find(x => x.type === type) ?? null;
+}
+
 function other(car: CarView): CarView | undefined {
   return p.value.cars.find(c => c.slot !== car.slot);
 }
@@ -50,6 +58,7 @@ function orderPreview(s: StockView) {
     <div v-if="locked" class="notice warn small">🔒 {{ locked }}</div>
     <div class="notice small">
       每台车独立装件。新研发的零件只有 1~2 件时，由你决定先给哪位车手——两台车差距达到 0.4 分以上时，吃亏的车手会在正赛前表达不满（自尊心越强越明显，若你已指定优先车手则影响减轻）。
+      动力单元按车手限量（如「1/4」）：换上本赛季没用过的规格或事故后换新件都会占用配额，超出后要罚退。
       <span v-if="p.allocationGap >= 0.4" class="badge warn">当前两车差距 {{ p.allocationGap }} 分</span>
     </div>
 
@@ -68,7 +77,16 @@ function orderPreview(s: StockView) {
             </thead>
             <tbody>
               <tr v-for="pt in car.parts" :key="pt.type">
-                <td>{{ pt.name }}</td>
+                <td>
+                  {{ pt.name }}
+                  <span
+                    v-if="puCell(car, pt.type)"
+                    class="badge"
+                    :class="{ bad: puCell(car, pt.type)!.used > puCell(car, pt.type)!.limit, warn: puCell(car, pt.type)!.used === puCell(car, pt.type)!.limit }"
+                    title="本赛季该车手已启用的件数 / 配额。换上没用过的规格或事故后换新件都会计数，超出配额要罚退"
+                    >{{ puCell(car, pt.type)!.used }}/{{ puCell(car, pt.type)!.limit }}</span
+                  >
+                </td>
                 <td>
                   <span class="mono">{{ partLabel(pt) }}</span>
                   <span v-if="!pt.verified" class="badge warn" title="需要练习赛「新件测试」或一场正赛来验证真实性能">待验证</span>

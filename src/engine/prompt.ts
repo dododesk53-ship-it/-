@@ -5,6 +5,7 @@
 import { LABELS } from './defaults';
 import { rankOfTeam } from './development';
 import { capRemaining } from './finance';
+import { fanCamps, fanGap, ferrariActive } from './ferrari';
 import { driverName } from './log';
 import { describeLog, UPDATE_TAG } from './protocol';
 import { carRatings, driverOverall, moraleLabel, teamPaceRanking, trackScore } from './ratings';
@@ -70,6 +71,18 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
     `资金 ${money(team.funds)} · 预算帽剩余 ${money(capRemaining(team, rules))}/${money(rules.costCap)} · 董事会信心 ${team.boardConfidence.toFixed(0)}（目标车队第 ${team.targetPosition}）· 媒体声誉 ${team.mediaReputation.toFixed(0)} · 员工士气 ${team.staffMorale.toFixed(0)}`,
   );
 
+  if (state.meta.selectionReason) L.push(`玩家被选中的原因（玩家自述）：${state.meta.selectionReason}`);
+  if (state.ferrari) {
+    const f = state.ferrari;
+    const fr = rules.ferrari;
+    const fans = fanCamps(f).map(id => `${driverName(state, id)}粉丝 ${f.fans[id].toFixed(0)}`).join(' / ');
+    L.push(
+      f.dismissed
+        ? `【法拉利·已撤职】玩家已被埃尔坎解除过渡领队职务：${f.dismissed}。本局结束，叙事应围绕离任与余波展开。`
+        : `【法拉利·过渡领队考核】媒体支持率 ${team.mediaReputation.toFixed(0)}（低于 ${fr.minMedia} 撤职，低于 ${fr.warnMedia} 告急）· ${fans}（差距 ${fanGap(f).toFixed(0)}，超过 ${fr.maxFanGap} 撤职）。升级件分配、优先车手、车队指令和成绩都会影响两边粉丝；意大利媒体比别处苛刻。`,
+    );
+  }
+
   // 赛车
   const ranking = teamPaceRanking(state, phase !== 'season_end' && track ? track : null, 'disclosed');
   const paceRank = ranking.findIndex(r => r.teamId === team.id) + 1;
@@ -94,8 +107,11 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
     const d = state.drivers[car.driverId];
     const st = state.standings.drivers[d.id];
     const pos = driverRows.indexOf(d.id) + 1;
+    const pu = Object.entries(rules.puAllocation)
+      .map(([pt, lim]) => `${rules.parts[pt]?.name ?? pt} ${d.puUsed?.[pt] ?? 1}/${lim}`)
+      .join('、');
     L.push(
-      `- ${d.name}（id:${d.id}，#${d.number}，${d.age} 岁）综合 ${driverOverall(d)} · 心态 ${d.morale.toFixed(0)}（${moraleLabel(d.morale)}）· 对你的信任 ${d.trust.toFixed(0)} · 体能 ${d.fitness.toFixed(0)} · 状态 ${signed(d.form)} · 车手榜 P${pos}（${st?.points ?? 0} 分）${team.driverPriority === d.id ? ' · 车队优先车手' : ''}${d.traits.length ? ` · 性格：${d.traits.join('、')}` : ''}`,
+      `- ${d.name}（id:${d.id}，#${d.number}，${d.age} 岁）${pu ? `动力单元已用 ${pu} · ` : ''}综合 ${driverOverall(d)} · 心态 ${d.morale.toFixed(0)}（${moraleLabel(d.morale)}）· 对你的信任 ${d.trust.toFixed(0)} · 体能 ${d.fitness.toFixed(0)} · 状态 ${signed(d.form)} · 车手榜 P${pos}（${st?.points ?? 0} 分）${team.driverPriority === d.id ? ' · 车队优先车手' : ''}${d.traits.length ? ` · 性格：${d.traits.join('、')}` : ''}`,
     );
   }
   const reserves = Object.values(state.drivers).filter(d => d.teamId === team.id && !team.cars.some(c => c.driverId === d.id));
@@ -157,7 +173,7 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
   if (opts.protocolReminder !== false) {
     const lim = rules.aiLimits;
     L.push(
-      `若剧情产生可量化的后果，在回复末尾用 <${UPDATE_TAG}> 每行一个 JSON 输出（没有就不输出）。单条幅度上限：心态/信任 ±${lim.morale}/±${lim.trust}，董事会 ±${lim.board}，媒体/士气 ±${lim.media}/±${lim.staff}，资金 ±${lim.funds}M，体能 ±${lim.fitness}，罚退 ≤${lim.penalty} 格；每条回复最多 ${lim.maxCommands} 条。`,
+      `若剧情产生可量化的后果，在回复末尾用 <${UPDATE_TAG}> 每行一个 JSON 输出（没有就不输出）。单条幅度上限：心态/信任 ±${lim.morale}/±${lim.trust}，董事会 ±${lim.board}，媒体/士气 ±${lim.media}/±${lim.staff}，资金 ±${lim.funds}M，体能 ±${lim.fitness}，罚退 ≤${lim.penalty} 格${ferrariActive(state) ? `，粉丝意见 ±${lim.fans}（{"op":"fans","driver":"车手id","delta":数值}）` : ''}；每条回复最多 ${lim.maxCommands} 条。`,
     );
   }
   L.push('</F1领队模拟器·实时数据>');

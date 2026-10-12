@@ -2,12 +2,12 @@
  * 逐圈比赛模拟（正赛 / 冲刺赛）。
  *
  * 每圈：计算每台车的圈速（赛车 × 车手 × 调校 × 轮胎衰减 × 油量 × 驾驶模式 × 随机）→
- * 事故/故障判定 → 超车判定（DRS、赛道超车难度、缠斗能力、车队指令）→ 进站 →
+ * 事故/故障判定 → 超车判定（2026 超车模式与 Boost 电能、赛道超车难度、缠斗能力、车队指令）→ 进站 →
  * 安全车/虚拟安全车。最终产出成绩表、关键事件、车手走势。
  */
 import { DEFAULT_PLAN } from './defaults';
 import { driverName } from './log';
-import { activeEntries, carRatings, raceSkill, trackScore } from './ratings';
+import { activeEntries, carRatings, fittedSpec, raceSkill, trackScore } from './ratings';
 import type { Rng } from './rng';
 import {
   degFactor,
@@ -68,6 +68,8 @@ interface SimCar {
   newCum: number;
   pittedThisLap: boolean;
   crashedOut: boolean;
+  /** 超车模式电能收益系数（能量回收系统性能 / 75） */
+  ersFactor: number;
 }
 
 export interface RaceExtras {
@@ -99,6 +101,13 @@ function chooseCompounds(
   const skill = sim.team.staff.strategist.skill;
   if (!sim.isPlayer && options.length > 1 && !rng.chance(0.45 + skill / 200)) return options[1].compounds;
   return options[0]?.compounds ?? [rules.dryCompounds[1], rules.dryCompounds[2] ?? rules.dryCompounds[0]];
+}
+
+/** 超车模式电能收益系数：能量回收系统越强，追近时多释放的电能越有用 */
+function ersFactor(team: TeamState, car: CarState, rules: GameState['rules']): number {
+  if (!rules.parts.ers) return 1;
+  const perf = fittedSpec(team, car, 'ers')?.perf ?? 75;
+  return Math.min(1.4, Math.max(0.6, perf / 75));
 }
 
 /** 每场的机械故障概率（rel=85 约 4%，rel=70 约 10%） */
@@ -147,6 +156,7 @@ export function simulateRace(state: GameState, rng: Rng, kind: 'race' | 'sprint'
       skill: raceSkill(e.driver, wet),
       carTyre: ratings.tyre,
       setupBonus: (setup.confidence / 100) * 0.3,
+      ersFactor: ersFactor(e.team, e.car, rules),
       knowledge: setup.tyreKnowledge,
       factor,
       compounds: [],
@@ -248,7 +258,7 @@ export function simulateRace(state: GameState, rng: Rng, kind: 'race' | 'sprint'
             pushEvent(lap, 'damage', `${driverName(state, c.driver.id)} 赛车出现故障，动力下降`, [c.driver.id], isKey(c));
           } else {
             c.status = 'dnf';
-            c.reason = rng.pick(['动力单元故障', '变速箱故障', '液压故障', '刹车过热', '冷却系统故障']);
+            c.reason = rng.pick(['内燃机故障', '能量回收系统故障', '变速箱故障', '液压故障', '刹车过热', '冷却系统故障']);
             pushEvent(lap, 'dnf', `${driverName(state, c.driver.id)} 因${c.reason}退赛`, [c.driver.id], true);
             deploy(lap, false);
           }
@@ -289,9 +299,11 @@ export function simulateRace(state: GameState, rng: Rng, kind: 'race' | 'sprint'
           B.newCum = A.newCum + MIN_GAP + 0.4;
           continue;
         }
-        const drs = !wet && gapStart < 1 ? 0.35 : 0;
-        const adv =
-          A.lapTime - B.lapTime + drs + (B.driver.attrs.racecraft - A.driver.attrs.racecraft) * 0.006 + (B.plan.paceMode === 'push' ? 0.08 : 0);
+        // 2026：DRS 取消。落后不足 overtakeModeGap 秒的车可开启超车模式（额外电能），
+        // 收益随能量回收系统的性能浮动；进攻模式代表主动按下 Boost 按钮释放电能。
+        const overtakeMode = !wet && gapStart < rules.overtakeModeGap ? rules.overtakeModeBonus * B.ersFactor : 0;
+        const boost = (B.plan.paceMode === 'push' ? rules.boostAttack : 0) - (A.plan.paceMode === 'push' ? rules.boostDefence : 0);
+        const adv = A.lapTime - B.lapTime + overtakeMode + boost + (B.driver.attrs.racecraft - A.driver.attrs.racecraft) * 0.006;
         const threshold = 0.25 + ((100 - track.overtaking) / 100) * 1.3;
         const p = 1 / (1 + Math.exp(-4 * (adv - threshold)));
         if (rng.chance(p)) {

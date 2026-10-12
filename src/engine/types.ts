@@ -122,6 +122,41 @@ export interface AiLimits {
   funds: number;
   fitness: number;
   penalty: number;
+  /** 粉丝意见（法拉利特殊机制） */
+  fans: number;
+}
+
+/**
+ * 法拉利特殊机制：媒体支持率 + 两位车手的粉丝意见。
+ * 只对 special = ferrari 的玩家车队生效。媒体支持率直接使用车队的 mediaReputation。
+ */
+export interface FerrariRules {
+  /** 开局媒体支持率 */
+  startMedia: number;
+  /** 开局两边粉丝的满意度 */
+  startFans: number;
+  /** 媒体支持率低于该值 → 撤职 */
+  minMedia: number;
+  /** 媒体支持率低于该值 → 警告 */
+  warnMedia: number;
+  /** 两边粉丝满意度差距超过该值 → 撤职 */
+  maxFanGap: number;
+  /** 两边粉丝满意度差距超过该值 → 警告 */
+  warnFanGap: number;
+  /** 每站正赛后媒体耐心的固定消耗 */
+  mediaPerRace: number;
+  /** 正赛成绩对媒体支持率影响的倍率 */
+  mediaResultMul: number;
+  /** 升级件分配：两台车每差 1 分综合性能，两边粉丝各变化多少 */
+  allocationFans: number;
+  /** 指定 / 取消优先车手的粉丝变化 */
+  priorityFans: number;
+  /** 执行车队指令（让车）的粉丝变化 */
+  orderFans: number;
+  /** 正赛名次高低 / 领奖台的粉丝变化 */
+  resultFans: number;
+  /** 撤职检查前的宽限站数（前 N 站只警告不撤职） */
+  graceRounds: number;
 }
 
 export interface Rules {
@@ -173,6 +208,24 @@ export interface Rules {
   aiLimits: AiLimits;
   /** 董事会信心低于该值时触发「被解雇」剧情 */
   boardFireThreshold: number;
+  /** 排位赛进入最后一节（Q3）的车数；其余车在 Q1/Q2 平分淘汰（2026：22 台车 → 6/6/10） */
+  qualiFinalists: number;
+  /** 超车模式（2026，取代 DRS）：落后前车不足该秒数时可获得额外电能 */
+  overtakeModeGap: number;
+  /** 超车模式的基础超车优势（秒/圈，按能量回收系统性能缩放） */
+  overtakeModeBonus: number;
+  /** Boost 按钮：进攻模式下主动释放电能带来的进攻优势（秒） */
+  boostAttack: number;
+  /** Boost 按钮：进攻模式下被追击时用电能防守的优势（秒） */
+  boostDefence: number;
+  /** 每位车手每赛季可用的动力单元元件数（键 = 零件类型） */
+  puAllocation: Record<PartType, number>;
+  /** 第一次超出配额的罚退格数 */
+  puPenaltyFirst: number;
+  /** 之后每次超出配额的罚退格数 */
+  puPenaltyNext: number;
+  /** 法拉利特殊机制 */
+  ferrari: FerrariRules;
 }
 
 // ───────────────────────────── 静态数据（来自世界书） ─────────────────────────────
@@ -238,6 +291,8 @@ export interface TeamDef {
   /** 董事会预期的车队排名 */
   targetPosition: number;
   description: string;
+  /** 特殊机制标识（目前只有 ferrari），空字符串 = 无 */
+  special: string;
 }
 
 export interface DriverDef {
@@ -367,6 +422,8 @@ export interface TeamState {
   /** 0~100：资源投向下赛季的比例 */
   nextSeasonFocus: number;
   description: string;
+  /** 特殊机制标识（旧存档没有该字段） */
+  special?: string;
 }
 
 export interface DriverStats {
@@ -401,6 +458,10 @@ export interface DriverState {
   traits: string[];
   description: string;
   stats: DriverStats;
+  /** 本赛季已启用的动力单元元件数（键 = 零件类型；旧存档没有该字段） */
+  puUsed?: Record<PartType, number>;
+  /** 本赛季已启用过的动力单元规格（换回池中的旧规格不计新件） */
+  puPool?: Record<PartType, string[]>;
 }
 
 /** 单站成绩代码：数字 = 名次；'DNF' 退赛；null = 未参赛 */
@@ -613,6 +674,20 @@ export interface GameMeta {
   randomness: Randomness;
   dataSignature: string;
   dataSources: string[];
+  /** 玩家开局时填写的「为什么被选中」（可为空） */
+  selectionReason?: string;
+}
+
+/** 法拉利特殊机制的动态状态 */
+export interface FerrariState {
+  /** 粉丝阵营：车手 id → 满意度 0~100 */
+  fans: Record<string, number>;
+  /** 已发出的警告（避免每站重复） */
+  warned: { media: boolean; gap: boolean };
+  /** 被撤职的原因（未撤职为 null） */
+  dismissed: string | null;
+  /** 最近几次粉丝/媒体变化（供面板展示） */
+  log: Array<{ at: string; text: string }>;
 }
 
 export interface SeasonState {
@@ -651,6 +726,8 @@ export interface GameState {
   narrated: NarrationEvent[];
   flags: Record<string, string | number | boolean>;
   aiLog: AiLogEntry[];
+  /** 法拉利特殊机制（非法拉利开局或旧存档为 null / 缺省） */
+  ferrari?: FerrariState | null;
   lastSeason: { year: number; driverChampion: string | null; constructorChampion: string | null; playerPosition: number | null } | null;
 }
 

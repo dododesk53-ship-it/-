@@ -9,6 +9,11 @@ const teamId = ref('');
 const principal = ref('');
 const difficulty = ref<'easy' | 'normal' | 'hard'>('normal');
 const randomness = ref<'deterministic' | 'fresh'>('deterministic');
+const selectionReason = ref('');
+const REASON_MAX = 300;
+
+const selectedTeam = computed(() => report.value?.teams.find(t => t.id === teamId.value) ?? null);
+const isFerrari = computed(() => selectedTeam.value?.special === 'ferrari');
 
 const errors = computed(() => report.value?.issues.filter(i => i.level === 'error') ?? []);
 const warnings = computed(() => report.value?.issues.filter(i => i.level === 'warning') ?? []);
@@ -24,7 +29,15 @@ async function load() {
 async function start() {
   if (!teamId.value) return toast('err', '请先选择车队');
   if (store.view && !confirm('重新开局会清空本聊天的存档历史（聊天消息不会删除），确定吗？')) return;
-  const r = await call(a => a.newGame({ playerTeamId: teamId.value, principalName: principal.value, difficulty: difficulty.value, randomness: randomness.value }));
+  const r = await call(a =>
+    a.newGame({
+      playerTeamId: teamId.value,
+      principalName: principal.value,
+      difficulty: difficulty.value,
+      randomness: randomness.value,
+      selectionReason: selectionReason.value.trim() || undefined,
+    }),
+  );
   if (r?.ok) {
     store.forceNewGame = false;
     store.tab = 'overview';
@@ -74,8 +87,37 @@ onMounted(load);
             <span class="badge">目标 P{{ t.targetPosition }}</span>
           </div>
           <div class="tiny muted">{{ t.drivers.join(' / ') || '无正式车手' }}</div>
+          <div v-if="t.special === 'ferrari'" class="tiny"><span class="badge warn">特殊机制：过渡领队</span></div>
           <div v-if="t.description" class="tiny desc">{{ t.description }}</div>
         </button>
+      </div>
+    </div>
+
+    <div v-if="isFerrari" class="card notice ferrari small stack-s">
+      <b>法拉利 · 过渡领队</b>
+      <div>
+        2025 年底，瓜尔蒂耶里主导的钢制气缸盖发动机方案失败，SF-25 赛季惨淡，埃尔坎解除了瓦塞尔的领队职务。内部继任人选还要考察，2026 年是过渡年——你是从外部请来的过渡领队。
+      </div>
+      <ul class="tiny">
+        <li>稳住媒体：<b>媒体支持率</b>过低会被撤职。</li>
+        <li>平衡粉丝：<b>汉密尔顿粉丝</b>与<b>勒克莱尔粉丝</b>的意见差距过大会被撤职。</li>
+        <li>升级件分配、优先车手、车队指令和比赛成绩都会影响两边粉丝。</li>
+      </ul>
+    </div>
+
+    <div class="card stack-s">
+      <label class="field">
+        你为什么被选中？（可选）
+        <textarea
+          v-model="selectionReason"
+          rows="3"
+          :maxlength="REASON_MAX"
+          :placeholder="isFerrari ? '例如：在耐力赛车队带出过两位不和的明星车手，擅长和意大利媒体打交道……' : '例如：在青训体系里带出过多位冠军……留空也可以'"
+        ></textarea>
+      </label>
+      <div class="tiny muted spread">
+        <span>会写进开场叙事和 AI 的背景资料。留空则由 AI 自由发挥。</span>
+        <span class="num">{{ selectionReason.length }}/{{ REASON_MAX }}</span>
       </div>
     </div>
 
@@ -141,5 +183,12 @@ onMounted(load);
 }
 .desc {
   color: #b9bfcc;
+}
+.notice.ferrari {
+  border-left: 4px solid #dc0000;
+}
+.notice.ferrari ul {
+  margin: 0;
+  padding-left: 18px;
 }
 </style>

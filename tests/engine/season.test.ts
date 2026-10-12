@@ -14,7 +14,7 @@ describe('开局', () => {
     }
     // 替补车手不占车
     expect(s.teams.team_a.cars.map(c => c.driverId)).toEqual(['a1', 'a2']);
-    expect(Object.keys(s.standings.drivers)).toHaveLength(23);
+    expect(Object.keys(s.standings.drivers)).toHaveLength(24);
     expect(s.narration.length).toBeGreaterThan(0);
     // 存档是纯 JSON
     expect(JSON.parse(JSON.stringify(s))).toEqual(s);

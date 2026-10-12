@@ -11,6 +11,7 @@
 import { AMBITIONS, LABELS, TRACK_DEMANDS } from './defaults';
 import { affordError, capRemaining, charge, income, payWeeklySalaries } from './finance';
 import { addNews, addNarration, driverName } from './log';
+import { recordPuFit } from './powerunit';
 import { bestDisclosedPerf, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec } from './ratings';
 import type { Rng } from './rng';
 import type {
@@ -414,8 +415,9 @@ export function fitPart(state: GameState, teamId: string, slot: number, partType
   stock[specId] -= 1;
   if (current) stock[current] = (stock[current] ?? 0) + 1;
   car.fitted[partType] = specId;
+  const penalty = recordPuFit(state, car.driverId, partType, specId);
   const who = car.driverId ? driverName(state, car.driverId) : `${slot} 号车`;
-  return ok(`已为 ${who} 换上 ${def.name} v${spec.version}`);
+  return ok(`已为 ${who} 换上 ${def.name} v${spec.version}${penalty ? `；${penalty}` : ''}`);
 }
 
 /** 新件交付后的自动分配（AI 车队；玩家可在设置里开启） */

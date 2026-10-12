@@ -1,5 +1,5 @@
 # ═══════════════ [F1M数据] 车手 ═══════════════
-# ⚠ 以下全部是「虚构的占位测试数据」，只用来验证框架。
+# ⚠ 除法拉利车手（hamilton / leclerc / giovinazzi，2026 真实资料）外，其余都是「虚构的占位测试数据」。
 #
 # 字段说明：
 #   id            唯一标识（AI 的数值指令用它指代车手，建议简短）
@@ -207,39 +207,62 @@ drivers:
     traits: [年轻, 稳步成长]
     description: 占位数据：车队培养的年轻车手。
 
-  - id: f1
-    name: 测试车手F1
-    short: TF1
-    number: 51
-    nationality: 测试国
-    age: 28
-    team: team_f
+  # ── 法拉利（2026 真实阵容）──
+  - id: hamilton
+    name: 刘易斯·汉密尔顿
+    short: HAM
+    number: 44
+    nationality: 英国
+    age: 41
+    team: ferrari
     role: race
-    attrs: { pace: 85, racecraft: 84, consistency: 80, tyre: 81, wet: 82, feedback: 78 }
-    potential: 87
-    morale: 66
-    ego: 75
-    salary: 6
-    contractEnd: 2026
-    traits: [好胜, 激进]
-    description: 占位数据：速度快但容易与队友冲突。
-
-  - id: f2
-    name: 测试车手F2
-    short: TF2
-    number: 52
-    nationality: 测试国
-    age: 32
-    team: team_f
-    role: race
-    attrs: { pace: 80, racecraft: 83, consistency: 85, tyre: 84, wet: 80, feedback: 82 }
-    potential: 82
-    morale: 64
-    ego: 45
-    salary: 3
+    attrs: { pace: 88, racecraft: 92, consistency: 86, tyre: 91, wet: 93, feedback: 90 }
+    potential: 88
+    morale: 55
+    ego: 72
+    salary: 60
     contractEnd: 2027
-    traits: [稳健, 经验丰富]
-    description: 占位数据：可靠的二号车手。
+    traits: [七届世界冠军, 雨战大师, 轮胎管理, 全球粉丝最多, 2025 年状态低迷]
+    description: >-
+      七届世界冠军，2025 年加盟法拉利。首个赛季车手榜第 6（156 分），赢下中国站冲刺赛，
+      却是职业生涯首次整季没有登上大奖赛领奖台；中国站还因底板磨损被取消成绩。
+      他需要一台能信任的赛车，也在意车队是否把他当作核心。
+
+  - id: leclerc
+    name: 夏尔·勒克莱尔
+    short: LEC
+    number: 16
+    nationality: 摩纳哥
+    age: 28
+    team: ferrari
+    role: race
+    attrs: { pace: 93, racecraft: 87, consistency: 84, tyre: 84, wet: 85, feedback: 83 }
+    potential: 94
+    morale: 62
+    ego: 68
+    salary: 34
+    contractEnd: 2028
+    traits: [排位单圈之王, 法拉利青训出身, 蒂弗西心头好, 偶尔失误]
+    description: >-
+      法拉利青训出身，2019 年起代表车队出赛。2025 年车手榜第 5（242 分），7 次登上领奖台但没有胜利。
+      意大利车迷视他为车队的未来，他不想再把头号地位让给任何人。
+
+  - id: giovinazzi
+    name: 安东尼奥·乔维纳兹
+    short: GIO
+    number: 99
+    nationality: 意大利
+    age: 32
+    team: ferrari
+    role: reserve
+    attrs: { pace: 79, racecraft: 76, consistency: 77, tyre: 77, wet: 76, feedback: 82 }
+    potential: 80
+    morale: 60
+    ego: 30
+    salary: 1.5
+    contractEnd: 2026
+    traits: [意大利人, 模拟器主力, 耐力赛经验]
+    description: 法拉利替补车手，同时参加法拉利的 WEC 耐力赛项目，大部分时间在模拟器里帮正式车手准备周末。
 
   - id: g1
     name: 测试车手G1

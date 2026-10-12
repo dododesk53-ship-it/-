@@ -1,12 +1,14 @@
 # ═══════════════ [F1M数据] 车队 ═══════════════
-# ⚠ 以下全部是「虚构的占位测试数据」，只用来验证框架能否运行。
-#   正式游玩前，请把它们替换成你自己的车队资料（或删除本条目，另建新条目）。
+# ⚠ 除「法拉利车队」（id: ferrari，2026 真实资料）外，其余都是「虚构的占位测试数据」，
+#   只用来验证框架能否运行。正式游玩前，请把它们替换成你自己的车队资料。
 #
 # 字段说明（除 id 外都可省略，省略时使用默认值）：
 #   id              唯一标识（英文/数字），车手与赛历都用它引用车队
 #   name / short    全称 / 三字母简称
 #   color           车队主色（#RRGGBB），用于界面
 #   principal       AI 车队的领队名字（玩家车队会被替换成玩家）
+#   special         特殊机制（可省略）。目前只有 ferrari：玩家作为过渡领队，
+#                   需要维持媒体支持率并平衡两位车手的粉丝意见，否则会被撤职
 #   engine / base   动力单元供应商 / 车队基地（仅供叙事）
 #   funds           初始资金（百万美元 M$）
 #   sponsorIncome   每站赞助收入（M$）
@@ -18,8 +20,9 @@
 #                   每项可写 {name, skill(1~100), salary(年薪 M$)}，也可只写一个数字表示 skill
 #   carBase         未单独填写的零件默认 {perf 性能, rel 可靠性}
 #   parts           各零件初始 {perf, rel}，键为零件类型：
-#                   power_unit 动力单元 / gearbox 变速箱 / chassis 底盘 / front_wing 前翼 /
-#                   rear_wing 尾翼 / floor 底板 / sidepods 侧箱 / suspension 悬挂
+#                   power_unit 内燃机 / ers 能量回收系统（2026：MGU-K 350kW，取消 MGU-H）/
+#                   gearbox 变速箱 / chassis 底盘 / front_wing 前翼（主动空力）/
+#                   rear_wing 尾翼（主动空力）/ floor 底板 / sidepods 侧箱 / suspension 悬挂
 #   description     车队简介（会显示在面板上）
 teams:
   - id: team_a
@@ -140,28 +143,43 @@ teams:
       rear_wing: { perf: 82, rel: 85 }
     description: 占位数据：资源充足的厂商车队，正在冲击冠军。
 
-  - id: team_f
-    name: 测试车队F
-    short: TSF
-    color: '#ff2f8f'
-    principal: 占位领队F
-    engine: 测试动力甲
-    base: 测试基地F
-    funds: 55
-    sponsorIncome: 4.0
-    operatingCost: 2.1
+  # ── 法拉利：真实车队（2026 赛季），带「过渡领队」特殊机制 ──
+  # 选择法拉利开局时：玩家是埃尔坎从外部请来的过渡领队，需要稳住媒体支持率，
+  # 并平衡汉密尔顿与勒克莱尔两边的粉丝意见（阈值见 [F1M数据] 规则中的 ferrari 段）。
+  - id: ferrari
+    name: 法拉利车队
+    short: FER
+    color: '#dc0000'
+    special: ferrari
+    principal: 空缺（过渡领队）
+    engine: 法拉利
+    base: 意大利·马拉内罗
+    funds: 120
+    sponsorIncome: 7.5
+    operatingCost: 2.6
     targetPosition: 4
-    facilities: { windTunnel: 3, cfd: 4, simulator: 4, factory: 3 }
+    facilities: { windTunnel: 4, cfd: 4, simulator: 5, factory: 5 }
     staff:
-      technicalDirector: { name: 技术总监F, skill: 77, salary: 2.0 }
-      aeroChief: { name: 空动主管F, skill: 76, salary: 1.6 }
-      raceEngineer: { name: 工程师F, skill: 76, salary: 0.9 }
-      pitCrew: { skill: 78, salary: 1.2 }
-      strategist: { name: 策略师F, skill: 78, salary: 1.0 }
-    carBase: { perf: 79, rel: 80 }
+      technicalDirector: { name: 洛伊克·塞拉（底盘技术总监）, skill: 84, salary: 3 }
+      aeroChief: { name: 迭戈·通迪, skill: 80, salary: 2 }
+      raceEngineer: { name: 布莱恩·博齐, skill: 79, salary: 1 }
+      pitCrew: { skill: 87, salary: 1.6 }
+      strategist: { name: 拉文·贾恩, skill: 77, salary: 1 }
+    carBase: { perf: 81, rel: 82 }
     parts:
-      power_unit: { perf: 86, rel: 80 }
-    description: 占位数据：使用强力引擎的客户车队，可靠性一般。
+      # 钢制气缸盖方案失败，只能退回保守方案：内燃机功率与可靠性都吃亏
+      power_unit: { perf: 77, rel: 76 }
+      ers: { perf: 80, rel: 80 }
+      chassis: { perf: 82, rel: 84 }
+      front_wing: { perf: 83, rel: 85 }
+      rear_wing: { perf: 82, rel: 85 }
+      floor: { perf: 80, rel: 82 }
+      suspension: { perf: 82, rel: 84 }
+    description: >-
+      SF-26 · 法拉利动力单元。2025 年 SF-25 的底板与后悬挂问题迫使赛车抬高车身，全年无大奖赛胜利，
+      车队积分榜第 4（398 分）。年底，恩里科·瓜尔蒂耶里主导的钢制气缸盖发动机方案宣告失败，
+      埃尔坎随即解除了弗雷德·瓦塞尔的领队职务。2026 是过渡年，你将作为外聘的过渡领队接手：
+      稳住媒体、平衡汉密尔顿与勒克莱尔两边的粉丝，否则会被撤职。
 
   - id: team_g
     name: 测试车队G

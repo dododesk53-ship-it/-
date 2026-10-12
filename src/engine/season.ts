@@ -6,6 +6,8 @@ import { advanceWeeks, rankOfTeam, refreshAeroAllowance, type Outcome } from './
 import { charge, prizeFor, settleRace, income } from './finance';
 import { addNarration, addNews, driverName, playerTeam, teamName } from './log';
 import { emptyStandings } from './newgame';
+import { ferrariAfterRace, ferrariMediaDelta, ferrariOnAllocation, ferrariOnBench, ferrariOnOrder } from './ferrari';
+import { resetPuUsage, recordPuFit } from './powerunit';
 import { simulateRace, type RaceExtras } from './race';
 import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
 import type { Rng } from './rng';
@@ -165,9 +167,16 @@ export function applyAllocationFairness(state: GameState): string[] {
     const winner = state.drivers[top.car.driverId!];
     winner.morale = round1(clamp(winner.morale + 1, 0, 100));
     const note = `${d.name} 的赛车比 ${winner.name} 慢约 ${gap.toFixed(1)} 分（升级件分配），心态 -${dm}、信任 -${dt}`;
+    const fans = ferrariOnAllocation(state, winner.id, d.id, gap);
     notes.push(note);
     addNews(state, '车手', note);
-    addNarration(state, 'allocation', '升级件分配引发不满', `${note}。${d.name} 的自尊心${d.ego >= 65 ? '很强，明显不服' : d.ego >= 40 ? '一般，但心里有疙瘩' : '不强，只是有些失落'}。`);
+    if (fans) addNews(state, '粉丝', fans);
+    addNarration(
+      state,
+      'allocation',
+      '升级件分配引发不满',
+      `${note}。${d.name} 的自尊心${d.ego >= 65 ? '很强，明显不服' : d.ego >= 40 ? '一般，但心里有疙瘩' : '不强，只是有些失落'}。${fans ? `社交媒体上：${fans}。` : ''}`,
+    );
   }
   return notes;
 }
@@ -267,6 +276,8 @@ function applyRaceOutcome(state: GameState, result: RaceResult, extras: RaceExtr
       y.trust = round1(clamp(y.trust - (2 + y.ego / 25), 0, 100));
       f.morale = round1(clamp(f.morale + 2, 0, 100));
       addNews(state, '车手', `${y.name} 服从车队指令让车给 ${f.name}，但显然并不情愿。`);
+      const fans = ferrariOnOrder(state, y.id, f.id, true);
+      if (fans) addNews(state, '粉丝', fans);
     } else {
       y.morale = round1(clamp(y.morale + 1, 0, 100));
       y.trust = round1(clamp(y.trust - 2, 0, 100));
@@ -277,6 +288,8 @@ function applyRaceOutcome(state: GameState, result: RaceResult, extras: RaceExtr
         team.mediaReputation = round1(clamp(team.mediaReputation - 2, 0, 100));
       }
       addNews(state, '车手', `${y.name} 无视车队指令拒绝让车给 ${f.name}，车库气氛紧张。`);
+      const fans = ferrariOnOrder(state, y.id, f.id, false);
+      if (fans) addNews(state, '粉丝', fans);
     }
   }
 
@@ -299,7 +312,7 @@ function applyRaceOutcome(state: GameState, result: RaceResult, extras: RaceExtr
         const best = Math.min(...result.classification.filter(c => c.teamId === tid && c.pos !== null).map(c => c.pos as number), 99);
         const crashed = result.classification.some(c => c.teamId === tid && /撞|碰撞|失控/.test(c.reason));
         const dRep = (best === 1 ? 4 : best <= 3 ? 2 : best <= 10 ? 0.5 : 0) - (crashed ? 1 : 0);
-        team.mediaReputation = round1(clamp(team.mediaReputation + dRep, 0, 100));
+        team.mediaReputation = round1(clamp(team.mediaReputation + ferrariMediaDelta(state, dRep), 0, 100));
       }
     }
     verifyFittedParts(state);
@@ -358,6 +371,8 @@ function applyRaceOutcome(state: GameState, result: RaceResult, extras: RaceExtr
   );
   const winner = result.classification[0];
   if (winner?.pos === 1) addNews(state, sprint ? '冲刺赛' : '正赛', `${driverName(state, winner.driverId)} 赢得 ${track.name} ${sprint ? '冲刺赛' : '大奖赛'}。`);
+  // 法拉利：媒体与粉丝的反应、撤职检查
+  ferrariAfterRace(state, result);
 }
 
 /** 事故导致的零件损毁与维修 */
@@ -377,11 +392,13 @@ function processCrashes(state: GameState, extras: RaceExtras, rng: Rng): string[
       if (replacement) {
         team.parts[pt].stock[replacement.id] -= 1;
         car.fitted[pt] = replacement.id;
-        destroyed.push(`${def.name} v${lost?.version ?? '?'}${replacement.id !== lost?.id ? `（换上 v${replacement.version}）` : ''}`);
+        const pen = recordPuFit(state, c.driverId, pt, replacement.id, { fresh: true, replaced: lost?.id });
+        destroyed.push(`${def.name} v${lost?.version ?? '?'}${replacement.id !== lost?.id ? `（换上 v${replacement.version}）` : ''}${pen ? `（${pen}）` : ''}`);
       } else {
         // 没有任何备件：工厂紧急赶制同规格
         charge(team, def.unitCost * 1.5, 'repair', rules);
-        destroyed.push(`${def.name} v${lost?.version ?? '?'}（无备件，紧急赶制 ${money(def.unitCost * 1.5)}）`);
+        const pen = lost ? recordPuFit(state, c.driverId, pt, lost.id, { fresh: true, replaced: lost.id }) : '';
+        destroyed.push(`${def.name} v${lost?.version ?? '?'}（无备件，紧急赶制 ${money(def.unitCost * 1.5)}）${pen ? `（${pen}）` : ''}`);
       }
     }
     const repair = round2(c.dnf ? rng.range(0.6, 1.4) : 0.25);
@@ -538,6 +555,7 @@ export function startNextSeason(state: GameState, rng: Rng): Outcome {
     d.morale = round1(60 + (d.morale - 60) * 0.5);
     d.form = 0;
     d.fitness = 100;
+    resetPuUsage(state, d, d.teamId ? state.teams[d.teamId]?.cars.find(c => c.driverId === d.id) : undefined);
     if (d.teamId && d.contractEnd && d.contractEnd < state.season.year) {
       addNews(state, '车手', `${d.name} 的合同已于 ${d.contractEnd} 年到期（续约系统尚未实现，暂时继续留队）。`);
     }
@@ -565,6 +583,9 @@ export function swapDriver(state: GameState, teamId: string, slot: number, drive
   car.driverId = driverId;
   if (prev && !other) state.drivers[prev].role = 'reserve';
   d.role = 'race';
+  if (!d.puUsed) resetPuUsage(state, d, car);
+  else for (const [pt, spec] of Object.entries(car.fitted)) if (d.puPool?.[pt] && !d.puPool[pt].includes(spec)) recordPuFit(state, driverId, pt, spec);
+  if (prev && !other && team.isPlayer) ferrariOnBench(state, prev, driverId);
   if (!state.standings.drivers[driverId]) state.standings.drivers[driverId] = deepClone(emptyStandings({ ...state, drivers: { [driverId]: d } }).drivers[driverId]);
   addNews(state, '车队', `${d.name} 将驾驶 ${slot} 号车${prev ? `，替换 ${driverName(state, prev)}` : ''}。`);
   return ok(`${d.name} 换到 ${slot} 号车`);

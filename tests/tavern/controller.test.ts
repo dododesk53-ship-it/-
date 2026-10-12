@@ -306,4 +306,19 @@ describe('数据错误', () => {
     expect(rep.ok).toBe(false);
     expect(rep.issues.some(i => i.message.includes('YAML'))).toBe(true);
   });
+
+  it('选择法拉利：写入被选中的理由，状态条显示媒体支持率与粉丝意见', async () => {
+    const env = new FakeTavern();
+    const ctrl = new F1Controller(env);
+    ctrl.init();
+    const res = await ctrl.newGame({ playerTeamId: 'ferrari', seed: 7, selectionReason: '我在耐力赛里带出过冠军车队' });
+    expect(res.ok).toBe(true);
+    expect(res.message).toContain('过渡领队');
+    const st = ctrl.stateAt()!;
+    expect(st.meta.selectionReason).toBe('我在耐力赛里带出过冠军车队');
+    const hud = ctrl.hud(0);
+    expect(hud.ferrari).toMatchObject({ media: st.rules.ferrari.startMedia, gap: 0, dismissed: null });
+    expect(hud.ferrari!.fans).toHaveLength(2);
+    expect((await ctrl.loadData()).teams.find(t => t.id === 'ferrari')?.special).toBe('ferrari');
+  });
 });

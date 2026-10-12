@@ -92,6 +92,17 @@
     var cars = (h.cars || []).map(function (c) {
       return '<span class="muted">' + c.slot + '号车 ' + esc(c.driver) + ' <span class="num">' + (c.score !== null ? c.score : c.overall) + '</span></span>';
     }).join('');
+    if (h.ferrari) {
+      var f = h.ferrari;
+      var mTone = f.media < f.minMedia ? 'bad' : f.media < f.warnMedia ? 'mid' : 'good';
+      var gTone = f.gap > f.maxFanGap ? 'bad' : f.gap > f.warnFanGap ? 'mid' : 'good';
+      html += '<div class="row line">' +
+        (f.dismissed ? '<span class="badge warn">已被撤职：' + esc(f.dismissed) + '</span>' : '<span class="badge" title="法拉利过渡领队考核">过渡领队</span>') +
+        '<span class="badge" title="媒体支持率（低于 ' + f.minMedia + ' 撤职）">媒体 <span class="num ' + mTone + '">' + f.media + '</span></span>' +
+        (f.fans || []).map(function (x) { return '<span class="badge" title="粉丝意见">' + esc(x.name) + '粉丝 <span class="num">' + x.value + '</span></span>'; }).join('') +
+        '<span class="badge" title="粉丝意见差距（超过 ' + f.maxFanGap + ' 撤职）">粉丝差 <span class="num ' + gTone + '">' + f.gap + '</span></span>' +
+        '</div>';
+    }
     html += '<div class="row line">' + drv + '</div>';
     html += '<div class="row line">' + cars +
       (h.projects && h.projects.length ? '<span class="muted">研发：' + h.projects.map(function (p) { return esc(p.label) + ' ' + p.weeksLeft + '周'; }).join('，') + '</span>' : '') +

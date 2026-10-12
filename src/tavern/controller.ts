@@ -78,7 +78,7 @@ export interface DataReport {
   origin: string;
   entries: string[];
   issues: DataIssue[];
-  teams: Array<{ id: string; name: string; color: string; targetPosition: number; description: string; drivers: string[] }>;
+  teams: Array<{ id: string; name: string; color: string; targetPosition: number; description: string; special: string; drivers: string[] }>;
   summary: string;
 }
 
@@ -95,6 +95,8 @@ export interface HudView {
   drivers?: Array<{ id: string; name: string; morale: number; moraleLabel: string; trust: number; overall: number; points: number }>;
   projects?: Array<{ label: string; weeksLeft: number; progress: number }>;
   lastRace?: string | null;
+  /** 法拉利过渡领队考核（只有法拉利存档有） */
+  ferrari?: { media: number; minMedia: number; warnMedia: number; fans: Array<{ name: string; value: number }>; gap: number; maxFanGap: number; warnFanGap: number; dismissed: string | null };
   changes: string[];
   narrated: string[];
   pending: number;
@@ -289,6 +291,18 @@ export class F1Controller {
         progress: Math.round(((p.weeksTotal - p.weeksLeft) / Math.max(1, p.weeksTotal)) * 100),
       })),
       lastRace,
+      ferrari: v.ferrari
+        ? {
+            media: Math.round(v.ferrari.media),
+            minMedia: v.ferrari.minMedia,
+            warnMedia: v.ferrari.warnMedia,
+            fans: v.ferrari.fans.map(f => ({ name: s.drivers[f.driverId]?.short ?? f.name, value: Math.round(f.value) })),
+            gap: Math.round(v.ferrari.gap),
+            maxFanGap: v.ferrari.maxFanGap,
+            warnFanGap: v.ferrari.warnFanGap,
+            dismissed: v.ferrari.dismissed,
+          }
+        : undefined,
       pending: s.narration.length,
       warning: resolved.fallback ? '该楼层原本的存档版本已被清理，显示的是最早仍保留的版本。' : undefined,
     };
@@ -356,6 +370,7 @@ export class F1Controller {
         color: t.color,
         targetPosition: t.targetPosition,
         description: t.description,
+        special: t.special,
         drivers: (db?.drivers ?? []).filter(d => d.teamId === t.id && d.role === 'race').map(d => d.name),
       })),
       summary: db ? `${db.teams.length} 支车队 · ${db.drivers.length} 名车手 · ${db.tracks.length} 条赛道 · ${db.calendar.length} 站` : '无数据',
@@ -377,6 +392,7 @@ export class F1Controller {
         difficulty: opts.difficulty ?? 'normal',
         randomness: opts.randomness ?? 'deterministic',
         seed: opts.seed,
+        selectionReason: opts.selectionReason,
       });
     } catch (e) {
       return { ok: false, message: e instanceof Error ? e.message : String(e) };
@@ -385,7 +401,8 @@ export class F1Controller {
     const floor = Math.max(0, this.latestFloor());
     this.store.commit(state, { floor, kind: 'new', label: `新开局：${state.teams[state.meta.playerTeamId].name}`, parent: null });
     this.notify('new_game');
-    return { ok: true, message: `已开局：你现在是 ${state.teams[state.meta.playerTeamId].name} 的领队` };
+    const role = state.ferrari ? '过渡领队' : '领队';
+    return { ok: true, message: `已开局：你现在是 ${state.teams[state.meta.playerTeamId].name} 的${role}` };
   }
 
   // ───────────────────────────── 动作 ─────────────────────────────

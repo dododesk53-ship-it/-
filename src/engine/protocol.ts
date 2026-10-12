@@ -10,7 +10,9 @@
  *
  * 引擎只接受白名单指令，并按规则限制单次幅度；赛车性能、零件、比赛结果等核心数值 AI 无权修改。
  */
+import { ferrariActive, shiftFans } from './ferrari';
 import { addNews } from './log';
+import { addGridPenalty } from './weekend';
 import type { AiLogEntry, GameState } from './types';
 import { clamp, pushCapped, round1, round2, stamp } from './util';
 
@@ -49,6 +51,8 @@ const OP_ALIASES: Record<string, string> = {
   标记: 'flag',
   penalty: 'penalty',
   罚退: 'penalty',
+  fans: 'fans',
+  粉丝: 'fans',
 };
 
 const BLOCK_RE = new RegExp(`<${UPDATE_TAG}>([\\s\\S]*?)<\\/${UPDATE_TAG}>`, 'gi');
@@ -213,6 +217,23 @@ function runCommands(state: GameState, commands: AiCommand[], messageId: number 
         log({ op: cmd.op, target: team.id, requested: delta, applied: round1(team[field] - before), reason, ok: true, note: allowed !== delta ? `已按上限 ±${limit} 裁剪` : '' });
         return;
       }
+      case 'fans': {
+        const id = resolveDriver(state, cmd.driver);
+        const delta = Number(cmd.delta);
+        if (!ferrariActive(state)) {
+          log({ op: 'fans', target: cmd.driver ?? '', requested: cmd.delta ?? null, applied: null, reason, ok: false, note: '只有法拉利过渡领队存档有粉丝意见' });
+          return;
+        }
+        if (!id || !(id in state.ferrari.fans) || !Number.isFinite(delta)) {
+          log({ op: 'fans', target: id ?? cmd.driver ?? '', requested: cmd.delta ?? null, applied: null, reason, ok: false, note: !id || !(id in state.ferrari.fans) ? '该车手没有粉丝阵营' : 'delta 不是数字' });
+          return;
+        }
+        const allowed = budget(`fans:${id}`, delta, limits.fans);
+        const before = state.ferrari.fans[id];
+        shiftFans(state, { [id]: allowed }, reason || '剧情');
+        log({ op: 'fans', target: id, requested: delta, applied: round1(state.ferrari.fans[id] - before), reason, ok: true, note: allowed !== delta ? `已按上限 ±${limits.fans} 裁剪` : '' });
+        return;
+      }
       case 'funds': {
         const delta = Number(cmd.delta);
         if (!Number.isFinite(delta)) {
@@ -236,7 +257,7 @@ function runCommands(state: GameState, commands: AiCommand[], messageId: number 
       }
       case 'flag': {
         const key = (cmd.key ?? '').trim().slice(0, 40);
-        if (!key || ['fired', 'pendingPenalties'].includes(key)) {
+        if (!key || ['fired', 'firedReason', 'pendingPenalties'].includes(key)) {
           log({ op: 'flag', target: key, requested: null, applied: null, reason, ok: false, note: '无效或受保护的标记名' });
           return;
         }
@@ -254,25 +275,7 @@ function runCommands(state: GameState, commands: AiCommand[], messageId: number 
         }
         // 同一条消息里对同一车手的罚退累计不超过上限
         const allowed = budget(`penalty:${id}`, grid, limits.penalty);
-        const phase = state.season.phase;
-        const beforeQuali = state.weekend && ['practice', 'sprint_qualifying', 'sprint', 'qualifying'].includes(phase);
-        let added = 0;
-        if (beforeQuali && state.weekend) {
-          const prev = state.weekend.penalties[id] ?? 0;
-          state.weekend.penalties[id] = Math.min(state.rules.maxGridPenalty, prev + allowed);
-          added = state.weekend.penalties[id] - prev;
-        } else {
-          let pending: Record<string, number> = {};
-          try {
-            pending = JSON.parse(String(state.flags.pendingPenalties || '{}'));
-          } catch {
-            pending = {};
-          }
-          const prev = pending[id] ?? 0;
-          pending[id] = Math.min(state.rules.maxGridPenalty, prev + allowed);
-          added = pending[id] - prev;
-          state.flags.pendingPenalties = JSON.stringify(pending);
-        }
+        const { added, thisRound } = addGridPenalty(state, id, allowed, state.rules.maxGridPenalty);
         log({
           op: 'penalty',
           target: id,
@@ -280,7 +283,7 @@ function runCommands(state: GameState, commands: AiCommand[], messageId: number 
           applied: added,
           reason,
           ok: added > 0,
-          note: added > 0 ? (beforeQuali ? '本站生效' : '下一站生效') : '已达到罚退上限',
+          note: added > 0 ? (thisRound ? '本站生效' : '下一站生效') : '已达到罚退上限',
         });
         return;
       }
@@ -302,6 +305,7 @@ const OP_LABEL: Record<string, string> = {
   news: '新闻',
   flag: '剧情标记',
   penalty: '罚退',
+  fans: '粉丝意见',
 };
 
 /** 把日志转成一行可读文本（状态条/提示词用） */

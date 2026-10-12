@@ -129,6 +129,12 @@ const book = {
     entry(4, '[F1M数据] 赛道', readCard(`${wb}/data-tracks.yaml`), { enabled: false, order: 903 }),
     entry(5, '[F1M数据] 赛历', readCard(`${wb}/data-calendar.yaml`), { enabled: false, order: 904 }),
     entry(6, '[F1M资料] 车手资料模板（复制后使用）', readCard(`${wb}/lore-template.md`), { enabled: false, keys: ['填写车手名'], order: 200 }),
+    entry(7, '[F1M资料] 法拉利车队（2026）', readCard(`${wb}/lore-ferrari.md`), {
+      keys: ['法拉利', 'Ferrari', '马拉内罗', '埃尔坎', '瓦塞尔', '瓜尔蒂耶里', 'SF-26', '过渡领队'],
+      order: 201,
+    }),
+    entry(8, '[F1M资料] 刘易斯·汉密尔顿', readCard(`${wb}/lore-hamilton.md`), { keys: ['汉密尔顿', 'Hamilton', '刘易斯'], order: 202 }),
+    entry(9, '[F1M资料] 夏尔·勒克莱尔', readCard(`${wb}/lore-leclerc.md`), { keys: ['勒克莱尔', 'Leclerc', '夏尔'], order: 203 }),
   ],
 };
 

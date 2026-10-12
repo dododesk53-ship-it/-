@@ -10,11 +10,11 @@ describe('数据解析（世界书 YAML）', () => {
     expect(res.issues).toEqual([]);
     expect(res.canStart).toBe(true);
     expect(res.db!.teams).toHaveLength(11);
-    expect(res.db!.drivers).toHaveLength(23);
+    expect(res.db!.drivers).toHaveLength(24);
     for (const t of res.db!.teams) {
       expect(res.db!.drivers.filter(d => d.teamId === t.id && d.role === 'race')).toHaveLength(2);
     }
-    expect(new Set(res.db!.drivers.map(d => d.number)).size).toBe(23);
+    expect(new Set(res.db!.drivers.map(d => d.number)).size).toBe(24);
     // 2026 规则：每支车队都有自己的奖金档和风洞时长档
     const rules = res.db!.rules;
     expect(rules.costCap).toBe(215);
@@ -53,7 +53,7 @@ describe('数据解析（世界书 YAML）', () => {
     const res = normalizeDatabase([...placeholderSources(), { name: '规则补丁', data: { rules: { costCap: 200, parts: { power_unit: { developable: false } } } } }]);
     expect(res.db!.rules.costCap).toBe(200);
     expect(res.db!.rules.parts.power_unit.developable).toBe(false);
-    expect(res.db!.rules.parts.power_unit.baseCost).toBe(6);
+    expect(res.db!.rules.parts.power_unit.baseCost).toBe(5);
   });
 
   it('引用错误会阻止开局并给出路径', () => {

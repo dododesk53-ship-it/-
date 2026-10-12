@@ -175,6 +175,17 @@ const RULE_RANGES: Record<string, { min?: number; max?: number; int?: boolean }>
   'aiLimits.maxCommands': { int: true },
   mandatoryCompounds: { min: 1, int: true },
   sprintLapsFactor: { max: 1 },
+  qualiFinalists: { min: 1, int: true },
+  'puAllocation.*': { min: 1, int: true },
+  puPenaltyFirst: { int: true },
+  puPenaltyNext: { int: true },
+  'ferrari.graceRounds': { int: true },
+  'ferrari.startMedia': { max: 100 },
+  'ferrari.startFans': { max: 100 },
+  'ferrari.minMedia': { max: 100 },
+  'ferrari.warnMedia': { max: 100 },
+  'ferrari.maxFanGap': { max: 100 },
+  'ferrari.warnFanGap': { max: 100 },
 };
 
 /**
@@ -192,7 +203,7 @@ function sanitizeRuleValue(ctx: Ctx, value: unknown, template: unknown, path: st
       return template;
     }
     // ambition / facilities 的键是固定的，但规则表里统一用通配符书写
-    const wild = pattern.replace(/^(ambition|facilities)\.[^.]+\./, '$1.*.');
+    const wild = pattern.replace(/^(ambition|facilities)\.[^.]+\./, '$1.*.').replace(/^puAllocation\.[^.]+$/, 'puAllocation.*');
     const range = RULE_RANGES[wild] ?? {};
     const min = range.min ?? (SIGNED_RULE_PATHS.has(wild) ? -Infinity : 0);
     if (value < min || (range.max !== undefined && value > range.max) || (range.int && !Number.isInteger(value))) {
@@ -318,6 +329,15 @@ function normalizeRules(ctx: Ctx, patches: Array<{ source: string; data: unknown
     }
   }
   rules.mandatoryCompounds = Math.min(rules.mandatoryCompounds, rules.dryCompounds.length);
+  for (const [pt, n] of Object.entries(rules.puAllocation)) {
+    if (!rules.parts[pt]) {
+      ctx.warn(`rules.puAllocation.${pt}`, `规则中没有零件类型「${pt}」，已忽略`);
+      delete rules.puAllocation[pt];
+    } else if (typeof n !== 'number' || !Number.isInteger(n) || n < 1) {
+      ctx.err(`rules.puAllocation.${pt}`, '配额应为 ≥ 1 的整数');
+      delete rules.puAllocation[pt];
+    }
+  }
   return rules;
 }
 
@@ -396,7 +416,21 @@ function normalizeTeam(ctx: Ctx, raw: unknown, index: number, rules: Rules): Tea
     parts,
     targetPosition: Math.round(ctx.num(raw, 'targetPosition', path, { def: 5, min: 1 })),
     description: ctx.str(raw, 'description', path),
+    special: normalizeSpecial(ctx, raw, path),
   };
+}
+
+/** 目前支持的特殊机制 */
+export const SPECIAL_MECHANICS = ['ferrari'] as const;
+
+function normalizeSpecial(ctx: Ctx, raw: Record<string, unknown>, path: string): string {
+  const v = ctx.str(raw, 'special', path).toLowerCase();
+  if (!v) return '';
+  if (!(SPECIAL_MECHANICS as readonly string[]).includes(v)) {
+    ctx.warn(`${path}.special`, `未知的特殊机制「${v}」，已忽略（可用：${SPECIAL_MECHANICS.join('、')}）`);
+    return '';
+  }
+  return v;
 }
 
 function normalizeDriver(ctx: Ctx, raw: unknown, index: number): DriverDef | null {

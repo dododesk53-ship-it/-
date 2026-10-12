@@ -13,6 +13,7 @@ import {
   type ProjectPreview,
 } from './development';
 import { annualSalaries, capRemaining } from './finance';
+import { fanCamps, fanGap } from './ferrari';
 import { describeLog } from './protocol';
 import { carRatings, disclosedPerf, driverOverall, findSpec, moraleLabel, teamPaceRanking, trackScore, type CarRatings } from './ratings';
 import { nextActionFor, sortedDrivers, sortedTeams, type NextAction } from './season';
@@ -105,6 +106,22 @@ export interface DriverView {
   isPlayerTeam: boolean;
   isPriority: boolean;
   slot: number | null;
+  /** 动力单元配额：已用 / 上限（只列出 rules.puAllocation 中的零件） */
+  pu: Array<{ type: string; name: string; used: number; limit: number }>;
+}
+
+export interface FerrariView {
+  media: number;
+  minMedia: number;
+  warnMedia: number;
+  fans: Array<{ driverId: string; name: string; value: number }>;
+  gap: number;
+  maxFanGap: number;
+  warnFanGap: number;
+  dismissed: string | null;
+  /** 还剩几站适应期（适应期内不会被撤职） */
+  graceLeft: number;
+  log: Array<{ at: string; text: string }>;
 }
 
 export interface WeekendDriverView {
@@ -187,6 +204,7 @@ export interface GameView {
   narrated: GameState['narrated'];
   aiLog: Array<GameState['aiLog'][number] & { text: string }>;
   flags: GameState['flags'];
+  ferrari: FerrariView | null;
   lastSeason: GameState['lastSeason'];
   labels: typeof LABELS & {
     parts: Record<string, string>;
@@ -253,6 +271,33 @@ function driverView(state: GameState, d: DriverState, positions: Map<string, num
     isPlayerTeam: d.teamId === state.meta.playerTeamId,
     isPriority: !!team && team.driverPriority === d.id,
     slot: car?.slot ?? null,
+    pu: Object.entries(state.rules.puAllocation).map(([type, limit]) => ({
+      type,
+      name: state.rules.parts[type]?.name ?? type,
+      used: d.puUsed?.[type] ?? 1,
+      limit,
+    })),
+  };
+}
+
+function ferrariView(state: GameState): FerrariView | null {
+  const f = state.ferrari;
+  if (!f) return null;
+  const r = state.rules.ferrari;
+  return {
+    media: state.teams[state.meta.playerTeamId].mediaReputation,
+    minMedia: r.minMedia,
+    warnMedia: r.warnMedia,
+    fans: fanCamps(f).map(id => ({ driverId: id, name: state.drivers[id]?.name ?? id, value: f.fans[id] })),
+    gap: fanGap(f),
+    maxFanGap: r.maxFanGap,
+    warnFanGap: r.warnFanGap,
+    dismissed: f.dismissed,
+    graceLeft:
+      state.season.number === 1
+        ? Math.max(0, r.graceRounds - state.season.roundIndex - (state.weekend?.roundIndex === state.season.roundIndex && state.weekend.race ? 1 : 0))
+        : 0,
+    log: [...f.log].reverse(),
   };
 }
 
@@ -431,6 +476,7 @@ export function buildView(state: GameState): GameView {
     narrated: state.narrated,
     aiLog: [...state.aiLog].reverse().map(e => ({ ...e, text: describeLog(state, e) })),
     flags: state.flags,
+    ferrari: ferrariView(state),
     lastSeason: state.lastSeason,
     labels: {
       ...LABELS,

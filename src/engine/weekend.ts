@@ -232,7 +232,9 @@ export function runQualifying(state: GameState, rng: Rng, kind: 'qualifying' | '
   const events: RaceEvent[] = [];
   let alive = entries.map(e => e.driver.id);
   const finalOrder: string[] = [];
-  const knockouts = n >= 10 ? [Math.floor(n / 4), Math.floor(n / 4)] : [];
+  // 三节淘汰：最后一节保留 qualiFinalists 台车，其余平均分到前两节淘汰（2026 年 22 台车 → 6/6/10）
+  const eliminated = n - state.rules.qualiFinalists;
+  const knockouts = eliminated >= 2 ? [Math.ceil(eliminated / 2), Math.floor(eliminated / 2)] : [];
   const sessionCount = knockouts.length + 1;
 
   for (let s = 0; s < sessionCount; s++) {
@@ -337,6 +339,29 @@ function lastTimeOf(sessions: QualiSession[], id: string): number | null {
     if (e) return e.time;
   }
   return null;
+}
+
+/**
+ * 给车手追加发车罚退：排位赛前加到本站，否则留到下一站。
+ * cap：该车手在这一站累计罚退的上限。返回实际增加的位数与是否本站生效。
+ */
+export function addGridPenalty(state: GameState, driverId: string, grid: number, cap: number): { added: number; thisRound: boolean } {
+  const beforeQuali = !!state.weekend && ['practice', 'sprint_qualifying', 'sprint', 'qualifying'].includes(state.season.phase);
+  let pending: Record<string, number> = {};
+  if (beforeQuali) pending = state.weekend!.penalties;
+  else {
+    try {
+      pending = JSON.parse(String(state.flags.pendingPenalties || '{}'));
+    } catch {
+      pending = {};
+    }
+  }
+  const prev = pending[driverId] ?? 0;
+  pending[driverId] = Math.max(prev, Math.min(cap, prev + Math.max(0, Math.round(grid))));
+  const added = pending[driverId] - prev;
+  if (!beforeQuali) state.flags.pendingPenalties = JSON.stringify(pending);
+  // pre_race 阶段还没有进入周末：罚退先存起来，但生效的仍是即将开始的这一站
+  return { added, thisRound: beforeQuali || state.season.phase === 'pre_race' };
 }
 
 /**

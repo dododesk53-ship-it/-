@@ -67,9 +67,9 @@ const approaches: Array<[QualiApproach, string, string]> = [
   ['aggressive', '激进', '更快，但失误率接近翻倍'],
 ];
 const paceModes: Array<[PaceMode, string, string]> = [
-  ['conserve', '保守', '慢约 0.3s/圈，轮胎与机械更耐用'],
+  ['conserve', '保守', '慢约 0.3s/圈，多回收电能，轮胎与机械更耐用'],
   ['balanced', '均衡', ''],
-  ['push', '进攻', '快约 0.2s/圈，衰减与故障/失误风险上升'],
+  ['push', '进攻', '快约 0.2s/圈，并用 Boost 按钮主动释放电能（超车、防守更强），衰减与故障/失误风险上升'],
 ];
 const timings: Array<[PitTiming, string, string]> = [
   ['early', '提前', '每段提前 2 圈进站（Undercut）'],
