@@ -52,7 +52,9 @@ new MutationObserver(() => {
   const f = document.querySelector('#f1m-panel-root iframe') as HTMLIFrameElement | null;
   if (f && !f.dataset.fontHooked) {
     f.dataset.fontHooked = '1';
-    f.addEventListener('load', () => injectFont(f.contentDocument));
+    const applyPanelFont = () => injectFont(f.contentDocument);
+    f.addEventListener('load', applyPanelFont);
+    applyPanelFont();
   }
 }).observe(document.body, { childList: true, subtree: true });
 
