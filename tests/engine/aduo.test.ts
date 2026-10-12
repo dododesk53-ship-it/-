@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { homologationsLeft, maybeEvaluateAduo, measureManufacturers } from '../../src/engine/aduo';
+import { homologationsLeft, maybeEvaluateAduo, measureManufacturers, nextEvalRound } from '../../src/engine/aduo';
 import { normalizeDatabase } from '../../src/engine/data';
 import { advanceWeeks, cancelProject, previewProject, startProject } from '../../src/engine/development';
 import { costCapOf } from '../../src/engine/finance';
@@ -154,5 +154,37 @@ describe('ADUO 与动力单元供应', () => {
     const res = normalizeDatabase(sources);
     expect(res.issues.some(i => i.path.includes('mclaren.worksTeam'))).toBe(true);
     expect(res.db!.teams.find(t => t.id === 'mclaren')!.worksTeam).toBe(false);
+  });
+
+  it('档位按未取整的差距判断', () => {
+    const s = cardGame('mercedes');
+    s.rules.aduo.pctPerPoint = 1;
+    const best = Math.max(...s.teams.mercedes.parts.power_unit.specs.map(x => x.perf));
+    for (const spec of s.teams.ferrari.parts.power_unit.specs) spec.perf = best - 1.96;
+    const row = measureManufacturers(s).find(r => r.engine === '法拉利')!;
+    expect(row.deficitPct).toBe(2);
+    expect(row.tier).toBe(0);
+  });
+
+  it('评估站的正赛结束后，下一次评估仍是本站', () => {
+    const s = cardGame('mercedes');
+    s.rules.aduo.evalRounds = [1, 2];
+    const post = advanceUntil(s, x => x.season.phase === 'post_race');
+    expect(nextEvalRound(post)).toBe(1);
+    const next = advanceUntil(post, x => x.season.phase === 'pre_race');
+    expect(nextEvalRound(next)).toBe(2);
+    s.rules.aduo.evalRounds = [s.calendar.length];
+    expect(nextEvalRound(s)).toBeNull();
+  });
+
+  it('旧存档中进行中的动力单元项目占用认证次数', () => {
+    const s = cardGame('mercedes');
+    expect(startProject(s, 'mercedes', 'power_unit', 'standard', false, new Rng(4)).ok).toBe(true);
+    const raw = JSON.parse(JSON.stringify(s));
+    delete raw.rules.aduo;
+    for (const t of Object.values(raw.teams) as Array<Record<string, unknown>>) delete t.puHomologations;
+    const m = migrateState(raw);
+    expect(m.teams.mercedes.puHomologations).toBe(1);
+    expect(previewProject(m, 'mercedes', 'ers', 'standard').ok).toBe(false);
   });
 });

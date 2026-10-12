@@ -35,7 +35,10 @@ export function migrateState(state: GameState): GameState {
   state.aduo ??= { evaluations: [] };
   for (const team of Object.values(state.teams)) {
     team.worksTeam ??= false;
-    team.puHomologations ??= 0;
+    // 进行中的动力单元设计项目已经占用认证次数（取消时会返还）
+    team.puHomologations ??= state.rules.aduo
+      ? team.projects.filter(p => p.kind === 'design' && p.partType && state.rules.aduo.parts.includes(p.partType)).length
+      : 0;
     team.aduoUpgrades ??= 0;
     team.aduoCapBonus ??= 0;
     team.aduoTier ??= 0;

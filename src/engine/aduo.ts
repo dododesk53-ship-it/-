@@ -153,7 +153,10 @@ export function recordAduoBaseline(state: GameState): void {
 export function nextEvalRound(state: GameState): number | null {
   const r = state.rules.aduo;
   if (!r.enabled) return null;
-  const done = state.season.roundIndex + (state.season.phase === 'post_race' || state.season.phase === 'season_end' ? 1 : 0);
+  if (state.season.phase === 'season_end') return null;
+  // 评估在 finishRound 中执行：post_race 时本站还没有评估，所以只算 roundIndex 之前的站。
+  // 最后一站之后直接进入赛季结束，补偿会被重置，所以不评估最后一站。
+  const done = state.season.roundIndex;
   const next = [...r.evalRounds].sort((a, b) => a - b).find(n => n > done && n < state.calendar.length);
   return next ?? null;
 }
@@ -173,16 +176,20 @@ export function measureManufacturers(state: GameState): AduoResult[] {
     const group = engineGroup(state, key);
     const works = group.find(t => t.worksTeam);
     const perf = Math.max(...(works ? [works] : group).map(t => bestSpec(t, pt)?.perf ?? 0));
-    rows.push({ engine: engineLabel(team), worksTeamId: works?.id ?? null, perf: round1(perf), deficitPct: 0, tier: 0, upgrades: 0, capBonus: 0 });
+    rows.push({ engine: engineLabel(team), worksTeamId: works?.id ?? null, perf, deficitPct: 0, tier: 0, upgrades: 0, capBonus: 0 });
   }
   const best = Math.max(...rows.map(x => x.perf));
   for (const row of rows) {
-    row.deficitPct = round1(Math.max(0, best - row.perf) * r.pctPerPoint);
-    row.tier = row.deficitPct >= r.tier2Deficit ? 2 : row.deficitPct >= r.tier1Deficit ? 1 : 0;
+    // 档位按未取整的差距判断；只在显示/存档时取一位小数
+    const deficit = Math.max(0, best - row.perf) * r.pctPerPoint;
+    row.deficitPct = round1(deficit);
+    row.tier = deficit >= r.tier2Deficit ? 2 : deficit >= r.tier1Deficit ? 1 : 0;
     row.upgrades = row.tier === 2 ? r.tier2Upgrades : row.tier === 1 ? r.tier1Upgrades : 0;
     row.capBonus = row.tier === 2 ? r.tier2CapBonus : row.tier === 1 ? r.tier1CapBonus : 0;
   }
-  return rows.sort((a, b) => b.perf - a.perf);
+  rows.sort((a, b) => b.perf - a.perf);
+  for (const row of rows) row.perf = round1(row.perf);
+  return rows;
 }
 
 /** 研发动力单元的车队：厂商车队；没有厂商车队时组内所有车队 */

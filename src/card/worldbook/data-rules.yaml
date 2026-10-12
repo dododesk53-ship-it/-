@@ -67,7 +67,7 @@ rules:
   #   parts: [power_unit, ers] # 计入认证升级次数、由厂商供应给客户车队的零件
   #   measurePart: power_unit  # 评估用的零件（2026 规则只评估内燃机）
   #   baseUpgrades: 1          # 每赛季基础认证升级次数（开工即计数，取消返还）
-  #   evalRounds: [6, 12, 18]  # 第几站正赛后评估
+  #   evalRounds: [6, 12, 18]  # 第几站正赛后评估（最后一站不评估：之后进入赛季结束，补偿重置）
   #   pctPerPoint: 0.5         # 1 点零件性能差距折合的百分比
   #   tier1Deficit: 2          # 落后 >= 2% 为一档
   #   tier2Deficit: 4          # 落后 >= 4% 为二档
