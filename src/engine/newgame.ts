@@ -16,6 +16,7 @@ import type {
 } from './types';
 import { deepClone, round1 } from './util';
 import { aeroAllowance } from './development';
+import { recordAduoBaseline } from './aduo';
 import { initFerrari } from './ferrari';
 import { resetPuUsage } from './powerunit';
 
@@ -102,6 +103,11 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
       color: def.color,
       principal: isPlayer ? opts.principalName : def.principal,
       engine: def.engine,
+      worksTeam: def.worksTeam,
+      puHomologations: 0,
+      aduoUpgrades: 0,
+      aduoCapBonus: 0,
+      aduoTier: 0,
       base: def.base,
       isPlayer,
       funds: def.funds,
@@ -165,9 +171,11 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
     narrated: [],
     flags: {},
     aiLog: [],
+    aduo: { evaluations: [] },
     lastSeason: null,
   };
   state.standings = emptyStandings(state);
+  recordAduoBaseline(state);
   for (const d of Object.values(drivers)) {
     resetPuUsage(state, d, d.teamId ? teams[d.teamId]?.cars.find(c => c.driverId === d.id) : undefined);
   }

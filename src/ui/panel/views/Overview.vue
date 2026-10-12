@@ -10,7 +10,7 @@ const team = computed(() => p.value.team);
 const track = computed(() => v.value.round?.track ?? null);
 const myDrivers = computed(() => v.value.drivers.filter(d => d.isPlayerTeam && d.slot !== null).sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0)));
 const ranking = computed(() => [...v.value.teams].filter(t => t.trackScore !== null).sort((a, b) => (b.trackScore ?? 0) - (a.trackScore ?? 0)));
-const capPct = computed(() => 1 - p.value.capRemaining / v.value.rules.costCap);
+const capPct = computed(() => 1 - p.value.capRemaining / p.value.costCap);
 const fr = computed(() => v.value.ferrari);
 const demandLabels: Record<string, string> = { downforce: '下压力', efficiency: '气动效率', power: '动力', mechanical: '机械抓地' };
 
@@ -24,7 +24,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
     <div class="grid g4">
       <Kpi label="车队积分榜" :value="`P${p.rank}`" :sub="`${p.points} 分 · 榜首 ${p.leaderPoints} 分`" />
       <Kpi label="资金" :value="money(team.funds)" :sub="`年薪支出 ${money(p.annualSalaries)}`" :tone="team.funds < 5 ? 'bad' : ''" />
-      <Kpi label="预算帽剩余" :value="money(p.capRemaining)" :sub="`已用 ${pct(capPct)} / ${money(v.rules.costCap)}`" :tone="p.capRemaining < 10 ? 'warn' : ''" />
+      <Kpi label="预算帽剩余" :value="money(p.capRemaining)" :sub="`已用 ${pct(capPct)} / ${money(p.costCap)}`" :tone="p.capRemaining < 10 ? 'warn' : ''" />
       <Kpi label="董事会信心" :value="Math.round(team.boardConfidence)" :sub="`目标：车队第 ${team.targetPosition}`" :tone="tone(team.boardConfidence)" />
       <Kpi
         :label="fr ? '媒体支持率' : '媒体声誉'"

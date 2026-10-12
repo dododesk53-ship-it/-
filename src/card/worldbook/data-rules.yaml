@@ -62,6 +62,21 @@ rules:
   #   ers: 3                  #   能量回收系统（MGU-K、电池、控制电子）
   # puPenaltyFirst: 10        # 第一次超出配额罚退位数
   # puPenaltyNext: 5          # 之后每次超出罚退位数
+  # aduo:                     # ADUO 动力单元追赶机制（车队数据中 worksTeam 标记厂商车队）
+  #   enabled: true
+  #   parts: [power_unit, ers] # 计入认证升级次数、由厂商供应给客户车队的零件
+  #   measurePart: power_unit  # 评估用的零件（2026 规则只评估内燃机）
+  #   baseUpgrades: 1          # 每赛季基础认证升级次数（开工即计数，取消返还）
+  #   evalRounds: [6, 12, 18]  # 第几站正赛后评估
+  #   pctPerPoint: 0.5         # 1 点零件性能差距折合的百分比
+  #   tier1Deficit: 2          # 落后 >= 2% 为一档
+  #   tier2Deficit: 4          # 落后 >= 4% 为二档
+  #   tier1Upgrades: 1         # 每次评估追加的认证升级次数
+  #   tier2Upgrades: 2
+  #   tier1CapBonus: 3         # 每次评估追加的本赛季预算帽额度（M$）
+  #   tier2CapBonus: 5
+  #   tier1WeeksMul: 0.9       # 动力单元研发周期倍率（额外台架时间）
+  #   tier2WeeksMul: 0.8
 
   # ── 轮胎 ──
   # tyres:

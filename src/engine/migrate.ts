@@ -30,6 +30,16 @@ function fillMissing(target: Record<string, unknown>, defaults: Record<string, u
 export function migrateState(state: GameState): GameState {
   if (!state?.rules || !state.teams) return state;
   if (state.ferrari === undefined) state.ferrari = null;
+  // ADUO（2026-10 新增）：旧存档没有厂商车队信息，按「各车队自行研发」处理
+  if (state.rules.puAllocation && !state.rules.aduo) state.rules.aduo = deepClone(DEFAULT_RULES.aduo);
+  state.aduo ??= { evaluations: [] };
+  for (const team of Object.values(state.teams)) {
+    team.worksTeam ??= false;
+    team.puHomologations ??= 0;
+    team.aduoUpgrades ??= 0;
+    team.aduoCapBonus ??= 0;
+    team.aduoTier ??= 0;
+  }
   // 已经是 2026 规则的存档（有 puAllocation）不再补规则：玩家可能在世界书里有意删掉了某些默认项
   if (state.rules.puAllocation) return state;
   fillMissing(state.rules as unknown as Record<string, unknown>, DEFAULT_RULES as unknown as Record<string, unknown>, true);

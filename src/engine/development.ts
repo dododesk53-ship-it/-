@@ -8,6 +8,7 @@
  *   4. 领队决定把新件装到哪台车上（升级件分配）；不平均的分配会影响车手心态与信任。
  *   5. 新件在练习赛「新件测试」或正赛后才会验证真实性能。
  */
+import { aduoWeeksMul, countHomologation, puDesignBlock, supplyCustomers } from './aduo';
 import { AMBITIONS, LABELS, TRACK_DEMANDS } from './defaults';
 import { affordError, capRemaining, charge, income, payWeeklySalaries } from './finance';
 import { addNews, addNarration, driverName } from './log';
@@ -139,12 +140,17 @@ export function previewProject(
   const expected = amb.gain * headroom(rules, best) * staffFactor(team, def.aero) * facilityGainFactor(team, def.aero);
   const spread = amb.spread * facilitySpreadFactor(team, def.aero);
   const cost = round2(def.baseCost * amb.costMul * (rush ? 1.5 : 1));
-  const weeks = Math.max(1, Math.round((def.baseWeeks * amb.weeksMul * (rush ? 0.65 : 1)) / speedFactor(team, def.aero)));
+  const weeks = Math.max(
+    1,
+    Math.round((def.baseWeeks * amb.weeksMul * (rush ? 0.65 : 1) * aduoWeeksMul(state, team, partType)) / speedFactor(team, def.aero)),
+  );
   const aeroHours = def.aero ? Math.round(def.aeroHours * amb.hoursMul) : 0;
   const units = rush ? 1 : amb.units;
   const relDelta = round1(amb.relDelta + team.facilities.factory * 0.5);
 
   if (!def.developable) blockers.push(`规则禁止研发${def.name}`);
+  const puBlock = puDesignBlock(state, team, partType);
+  if (puBlock) blockers.push(puBlock);
   const designing = team.projects.filter(p => p.kind === 'design');
   if (designing.length >= rndSlots(team, rules)) blockers.push(`研发槽位已满（${designing.length}/${rndSlots(team, rules)}）`);
   if (designing.some(p => p.partType === partType)) blockers.push(`${def.name}已有在研项目`);
@@ -206,6 +212,7 @@ export function startProject(
     startedAt: stamp(state),
   };
   team.projects.push(project);
+  countHomologation(state, team, partType, 1);
   if (team.isPlayer) {
     addNews(state, '研发', `启动${project.label}项目：花费 $${pv.cost.toFixed(1)}M，预计 ${pv.weeks} 周，预期提升 +${lo}~+${hi}。`);
   }
@@ -218,6 +225,7 @@ export function cancelProject(state: GameState, teamId: string, projectId: strin
   if (idx < 0) return fail('找不到该项目');
   const p = team.projects[idx];
   team.projects.splice(idx, 1);
+  if (p.kind === 'design' && p.partType) countHomologation(state, team, p.partType, -1);
   // 取消只退还 30% 的现金（预算帽额度不退）
   const refund = round2(p.cost * 0.3);
   income(team, refund);
@@ -466,6 +474,7 @@ function completeProject(state: GameState, team: TeamState, p: Project, rng: Rng
       };
       parts.specs.push(spec);
       parts.stock[spec.id] = (parts.stock[spec.id] ?? 0) + (p.units ?? 1);
+      supplyCustomers(state, team, pt, spec);
       if (team.isPlayer) {
         addNews(state, '研发', `${def.name} v${version} 已交付 ×${p.units ?? 1}（预估性能 ${spec.expected?.[0]}~${spec.expected?.[1]}），等待分配到赛车。`);
         addNarration(
@@ -580,7 +589,7 @@ function aiTeamWeek(state: GameState, team: TeamState, rng: Rng): void {
   if (designing.length < slots && team.funds > 8 && capRemaining(team, rules) > 6) {
     const imp = partImportance(rules, upcomingDemands(state));
     const candidates = Object.keys(rules.parts)
-      .filter(pt => rules.parts[pt].developable && !designing.some(p => p.partType === pt))
+      .filter(pt => rules.parts[pt].developable && !designing.some(p => p.partType === pt) && !puDesignBlock(state, team, pt))
       .map(pt => {
         const best = bestSpec(team, pt)?.perf ?? 50;
         const score = (imp[pt] * headroom(rules, best)) / Math.max(0.5, rules.parts[pt].baseCost);

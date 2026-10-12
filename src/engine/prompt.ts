@@ -4,7 +4,8 @@
  */
 import { LABELS } from './defaults';
 import { rankOfTeam } from './development';
-import { capRemaining } from './finance';
+import { capRemaining, costCapOf } from './finance';
+import { aduoLine } from './aduo';
 import { fanCamps, fanGap, ferrariActive } from './ferrari';
 import { driverName } from './log';
 import { describeLog, UPDATE_TAG } from './protocol';
@@ -68,9 +69,11 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
     `玩家：${state.meta.principalName}（{{user}}），${team.name} 车队领队 · 车队积分榜 P${rank}（${pts} 分${leader && leader !== team.id ? `，榜首 ${state.teams[leader].name} ${state.standings.teams[leader]?.points ?? 0} 分` : ''}）`,
   );
   L.push(
-    `资金 ${money(team.funds)} · 预算帽剩余 ${money(capRemaining(team, rules))}/${money(rules.costCap)} · 董事会信心 ${team.boardConfidence.toFixed(0)}（目标车队第 ${team.targetPosition}）· 媒体声誉 ${team.mediaReputation.toFixed(0)} · 员工士气 ${team.staffMorale.toFixed(0)}`,
+    `资金 ${money(team.funds)} · 预算帽剩余 ${money(capRemaining(team, rules))}/${money(costCapOf(team, rules))} · 董事会信心 ${team.boardConfidence.toFixed(0)}（目标车队第 ${team.targetPosition}）· 媒体声誉 ${team.mediaReputation.toFixed(0)} · 员工士气 ${team.staffMorale.toFixed(0)}`,
   );
 
+  const aduo = aduoLine(state);
+  if (aduo) L.push(aduo);
   if (state.meta.selectionReason) L.push(`玩家被选中的原因（玩家自述）：${state.meta.selectionReason}`);
   if (state.ferrari) {
     const f = state.ferrari;

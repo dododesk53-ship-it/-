@@ -27,7 +27,10 @@
 #   principal       AI 车队的领队名字（玩家车队会被替换成玩家）
 #   special         特殊机制（可省略）。目前只有 ferrari：玩家作为过渡领队，
 #                   需要维持媒体支持率并平衡两位车手的粉丝意见，否则会被撤职
-#   engine / base   动力单元供应商 / 车队基地（仅供叙事）
+#   engine / base   动力单元供应商 / 车队基地
+#   worksTeam       动力单元厂商车队（true / 省略）。同一 engine 的其他车队是客户车队：
+#                   不能自行研发 power_unit / ers，厂商车队的新件会同时交付给客户车队。
+#                   ADUO 评估也按厂商（engine）进行，只有厂商车队获得补偿
 #   funds           初始资金（百万美元 M$）
 #   sponsorIncome   每站赞助收入（M$）
 #   operatingCost   每站运营成本（M$，计入预算帽）
@@ -52,6 +55,7 @@ teams:
     color: '#27f4d2'
     principal: 托托·沃尔夫
     engine: 梅赛德斯
+    worksTeam: true
     base: 英国·布拉克利
     funds: 115
     sponsorIncome: 7.2
@@ -116,6 +120,7 @@ teams:
     color: '#3671c6'
     principal: 洛朗·梅基斯
     engine: 红牛-福特
+    worksTeam: true
     base: 英国·米尔顿凯恩斯
     funds: 115
     sponsorIncome: 7.4
@@ -152,6 +157,7 @@ teams:
     special: ferrari
     principal: 空缺（过渡领队）
     engine: 法拉利
+    worksTeam: true
     base: 意大利·马拉内罗
     funds: 120
     sponsorIncome: 7.5
@@ -253,6 +259,7 @@ teams:
     color: '#229971'
     principal: 阿德里安·纽维
     engine: 本田
+    worksTeam: true
     base: 英国·银石
     funds: 110
     sponsorIncome: 6.5
@@ -318,6 +325,7 @@ teams:
     color: '#bb0a30'
     principal: 乔纳森·惠特利
     engine: 奥迪
+    worksTeam: true
     base: 瑞士·欣维尔
     funds: 105
     sponsorIncome: 5.6

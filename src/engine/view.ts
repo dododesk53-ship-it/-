@@ -2,6 +2,15 @@
  * 视图模型：把存档加工成前端直接可用的数据（评分、排名、预览、标签）。
  * 前端只读视图、只通过动作修改存档，保证所有规则都在引擎里。
  */
+import {
+  engineLabel,
+  homologationsLeft,
+  homologationsTotal,
+  isPuCustomer,
+  nextEvalRound,
+  tierName,
+  worksTeamFor,
+} from './aduo';
 import { AMBITIONS, FACILITIES, LABELS, STAFF_ROLES } from './defaults';
 import {
   allocationGap,
@@ -12,7 +21,7 @@ import {
   rndSlots,
   type ProjectPreview,
 } from './development';
-import { annualSalaries, capRemaining } from './finance';
+import { annualSalaries, capRemaining, costCapOf } from './finance';
 import { fanCamps, fanGap } from './ferrari';
 import { describeLog } from './protocol';
 import { carRatings, disclosedPerf, driverOverall, findSpec, moraleLabel, teamPaceRanking, trackScore, type CarRatings } from './ratings';
@@ -124,6 +133,39 @@ export interface FerrariView {
   log: Array<{ at: string; text: string }>;
 }
 
+export interface AduoView {
+  enabled: boolean;
+  /** 玩家车队使用的动力单元 */
+  engine: string;
+  /** 玩家是客户车队时的供应商（厂商车队）名称 */
+  supplier: string | null;
+  isWorks: boolean;
+  isCustomer: boolean;
+  /** 以下是负责研发的车队（玩家或供应商）的状态 */
+  upgradesUsed: number;
+  upgradesTotal: number;
+  upgradesLeft: number;
+  tier: number;
+  tierName: string;
+  capBonus: number;
+  evalRounds: number[];
+  nextEvalRound: number | null;
+  /** 最近一次评估（round = 0 是季前基准，不产生效果） */
+  last: { round: number; results: AduoRowView[] } | null;
+  /** 门槛（%） */
+  tier1Deficit: number;
+  tier2Deficit: number;
+}
+
+export interface AduoRowView {
+  engine: string;
+  worksTeam: string | null;
+  deficitPct: number;
+  tier: number;
+  tierName: string;
+  isPlayer: boolean;
+}
+
 export interface WeekendDriverView {
   driverId: string;
   driverName: string;
@@ -179,6 +221,8 @@ export interface GameView {
     points: number;
     leaderPoints: number;
     capRemaining: number;
+    /** 本赛季预算帽（含 ADUO 追加额度） */
+    costCap: number;
     annualSalaries: number;
     rndSlots: number;
     allocationGap: number;
@@ -205,6 +249,7 @@ export interface GameView {
   aiLog: Array<GameState['aiLog'][number] & { text: string }>;
   flags: GameState['flags'];
   ferrari: FerrariView | null;
+  aduo: AduoView;
   lastSeason: GameState['lastSeason'];
   labels: typeof LABELS & {
     parts: Record<string, string>;
@@ -277,6 +322,43 @@ function driverView(state: GameState, d: DriverState, positions: Map<string, num
       used: d.puUsed?.[type] ?? 1,
       limit,
     })),
+  };
+}
+
+function aduoView(state: GameState): AduoView {
+  const r = state.rules.aduo;
+  const team = state.teams[state.meta.playerTeamId];
+  const supplier = isPuCustomer(state, team) ? worksTeamFor(state, team)! : null;
+  const dev = supplier ?? team;
+  const mine = engineLabel(team);
+  const rows = (list: Array<{ engine: string; worksTeamId: string | null; deficitPct: number; tier: number }>): AduoRowView[] =>
+    list.map(x => ({
+      engine: x.engine,
+      worksTeam: x.worksTeamId ? (state.teams[x.worksTeamId]?.name ?? x.worksTeamId) : null,
+      deficitPct: x.deficitPct,
+      tier: x.tier,
+      tierName: tierName(x.tier),
+      isPlayer: x.engine === mine,
+    }));
+  const evals = state.aduo?.evaluations ?? [];
+  const last = evals.length ? evals[evals.length - 1] : null;
+  return {
+    enabled: r.enabled,
+    engine: mine,
+    supplier: supplier?.name ?? null,
+    isWorks: !!team.worksTeam,
+    isCustomer: !!supplier,
+    upgradesUsed: dev.puHomologations ?? 0,
+    upgradesTotal: homologationsTotal(state, dev),
+    upgradesLeft: homologationsLeft(state, dev),
+    tier: dev.aduoTier ?? 0,
+    tierName: tierName(dev.aduoTier ?? 0),
+    capBonus: dev.aduoCapBonus ?? 0,
+    evalRounds: [...r.evalRounds].sort((a, b) => a - b),
+    nextEvalRound: nextEvalRound(state),
+    last: last ? { round: last.round, results: rows(last.results) } : null,
+    tier1Deficit: r.tier1Deficit,
+    tier2Deficit: r.tier2Deficit,
   };
 }
 
@@ -387,6 +469,7 @@ export function buildView(state: GameState): GameView {
       points: state.standings.teams[team.id]?.points ?? 0,
       leaderPoints: Math.max(0, ...Object.values(state.standings.teams).map(t => t.points)),
       capRemaining: capRemaining(team, rules),
+      costCap: costCapOf(team, rules),
       annualSalaries: round1(annualSalaries(state, team)),
       rndSlots: rndSlots(team, rules),
       allocationGap: allocationGap(state, team),
@@ -477,6 +560,7 @@ export function buildView(state: GameState): GameView {
     aiLog: [...state.aiLog].reverse().map(e => ({ ...e, text: describeLog(state, e) })),
     flags: state.flags,
     ferrari: ferrariView(state),
+    aduo: aduoView(state),
     lastSeason: state.lastSeason,
     labels: {
       ...LABELS,

@@ -1,6 +1,7 @@
 /**
  * 赛季流程：阶段推进、赛后结算（积分/财务/心态/零件损毁/车手成长）、赛季末与新赛季。
  */
+import { maybeEvaluateAduo, resetAduoSeason, syncCustomerPu } from './aduo';
 import { LABELS } from './defaults';
 import { advanceWeeks, rankOfTeam, refreshAeroAllowance, type Outcome } from './development';
 import { charge, prizeFor, settleRace, income } from './finance';
@@ -118,6 +119,7 @@ export function finishRound(state: GameState, rng: Rng): Outcome {
     seasonEnd(state);
     return ok('赛季结束');
   }
+  maybeEvaluateAduo(state, state.season.roundIndex + 1);
   state.season.roundIndex += 1;
   refreshAeroAllowance(state);
   const gap = state.calendar[state.season.roundIndex].weeksGap;
@@ -544,6 +546,8 @@ export function startNextSeason(state: GameState, rng: Rng): Outcome {
     team.costCapSpent = 0;
     team.aeroHours = 0;
   }
+  syncCustomerPu(state);
+  resetAduoSeason(state);
   // 按上赛季排名分配风洞时长
   finalOrder.forEach((tid, i) => {
     state.teams[tid].aeroHours = Math.round(rules.aeroAllowanceBase * (rules.aeroAllowanceByPosition[Math.min(i, rules.aeroAllowanceByPosition.length - 1)] ?? 1));

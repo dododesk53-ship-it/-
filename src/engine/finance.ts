@@ -6,6 +6,11 @@
  * - 薪水按周发放（年薪 / 52），运营成本与赞助收入按站结算，奖金在赛季末结算。
  */
 import type { GameState, Rules, TeamState } from './types';
+
+/** 车队本赛季的预算帽（规则上限 + ADUO 追加额度） */
+export function costCapOf(team: TeamState, rules: Rules): number {
+  return round2(rules.costCap + (team.aduoCapBonus ?? 0));
+}
 import { round2 } from './util';
 
 export type ChargeCategory = 'rnd' | 'manufacture' | 'repair' | 'operating' | 'salary' | 'facility' | 'misc';
@@ -27,14 +32,14 @@ export function isCapped(category: ChargeCategory, rules: Rules): boolean {
 }
 
 export function capRemaining(team: TeamState, rules: Rules): number {
-  return round2(rules.costCap - team.costCapSpent);
+  return round2(costCapOf(team, rules) - team.costCapSpent);
 }
 
 /** 检查能否支付；返回错误原因或 null */
 export function affordError(team: TeamState, amount: number, category: ChargeCategory, rules: Rules): string | null {
   if (amount <= 0) return null;
   if (team.funds < amount) return `资金不足（需要 $${amount.toFixed(1)}M，现有 $${team.funds.toFixed(1)}M）`;
-  if (isCapped(category, rules) && team.costCapSpent + amount > rules.costCap + 1e-9) {
+  if (isCapped(category, rules) && team.costCapSpent + amount > costCapOf(team, rules) + 1e-9) {
     return `会超出预算帽（剩余 $${capRemaining(team, rules).toFixed(1)}M，需要 $${amount.toFixed(1)}M）`;
   }
   return null;

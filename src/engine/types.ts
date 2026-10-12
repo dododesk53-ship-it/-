@@ -127,6 +127,63 @@ export interface AiLimits {
 }
 
 /**
+ * ADUO（Additional Development and Upgrade Opportunities，2026 动力单元追赶机制）。
+ *
+ * - 动力单元零件（parts）每赛季只能认证 baseUpgrades 次升级（开工即计数，取消返还）。
+ * - 有厂商车队（worksTeam）的动力单元由厂商车队研发，客户车队不能自行研发，厂商的新件同时交付给客户车队。
+ * - 在 evalRounds 列出的站次（正赛后）按厂商评估 measurePart 的真实性能：
+ *   落后最好厂商的百分比 = 性能分差 × pctPerPoint。
+ *   落后 ≥ tier1Deficit% → 一档；≥ tier2Deficit% → 二档。
+ *   每次评估按档位给厂商车队增加认证升级次数、本赛季预算帽额度，并缩短动力单元研发周期（到下次评估为止）。
+ */
+export interface AduoRules {
+  enabled: boolean;
+  /** 计入认证升级次数、并由厂商供应给客户车队的零件类型 */
+  parts: PartType[];
+  /** 评估用的零件类型（2026 规则只评估内燃机） */
+  measurePart: PartType;
+  /** 每赛季基础认证升级次数 */
+  baseUpgrades: number;
+  /** 评估站次（第 N 站正赛后，1 起） */
+  evalRounds: number[];
+  /** 1 分零件性能差距折合的百分比 */
+  pctPerPoint: number;
+  tier1Deficit: number;
+  tier2Deficit: number;
+  tier1Upgrades: number;
+  tier2Upgrades: number;
+  /** 每次评估增加的预算帽额度（M$，本赛季有效） */
+  tier1CapBonus: number;
+  tier2CapBonus: number;
+  /** 动力单元研发周期倍率（台架时间增加） */
+  tier1WeeksMul: number;
+  tier2WeeksMul: number;
+}
+
+export interface AduoResult {
+  engine: string;
+  /** 厂商车队 id（没有厂商车队时为空） */
+  worksTeamId: string | null;
+  perf: number;
+  deficitPct: number;
+  tier: number;
+  upgrades: number;
+  capBonus: number;
+}
+
+export interface AduoEvaluation {
+  year: number;
+  /** 第几站后评估（1 起） */
+  round: number;
+  results: AduoResult[];
+}
+
+export interface AduoState {
+  /** 本赛季的评估记录 */
+  evaluations: AduoEvaluation[];
+}
+
+/**
  * 法拉利特殊机制：媒体支持率 + 两位车手的粉丝意见。
  * 只对 special = ferrari 的玩家车队生效。媒体支持率直接使用车队的 mediaReputation。
  */
@@ -226,6 +283,8 @@ export interface Rules {
   puPenaltyNext: number;
   /** 法拉利特殊机制 */
   ferrari: FerrariRules;
+  /** ADUO 动力单元追赶机制 */
+  aduo: AduoRules;
 }
 
 // ───────────────────────────── 静态数据（来自世界书） ─────────────────────────────
@@ -278,6 +337,8 @@ export interface TeamDef {
   color: string;
   principal: string;
   engine: string;
+  /** 动力单元厂商车队（同一 engine 的其他车队是客户车队） */
+  worksTeam: boolean;
   base: string;
   funds: number;
   /** 每站赞助收入 (M$) */
@@ -399,6 +460,16 @@ export interface TeamState {
   color: string;
   principal: string;
   engine: string;
+  /** 动力单元厂商车队（旧存档没有该字段） */
+  worksTeam?: boolean;
+  /** 本赛季已用的动力单元认证升级次数 */
+  puHomologations?: number;
+  /** 本赛季 ADUO 追加的认证升级次数 */
+  aduoUpgrades?: number;
+  /** 本赛季 ADUO 追加的预算帽额度（M$） */
+  aduoCapBonus?: number;
+  /** 当前 ADUO 档位（0 = 无） */
+  aduoTier?: number;
   base: string;
   isPlayer: boolean;
   funds: number;
@@ -728,6 +799,8 @@ export interface GameState {
   aiLog: AiLogEntry[];
   /** 法拉利特殊机制（非法拉利开局或旧存档为 null / 缺省） */
   ferrari?: FerrariState | null;
+  /** ADUO 评估记录（旧存档缺省） */
+  aduo?: AduoState | null;
   lastSeason: { year: number; driverChampion: string | null; constructorChampion: string | null; playerPosition: number | null } | null;
 }
 

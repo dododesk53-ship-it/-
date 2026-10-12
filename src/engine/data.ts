@@ -186,6 +186,11 @@ const RULE_RANGES: Record<string, { min?: number; max?: number; int?: boolean }>
   'ferrari.warnMedia': { max: 100 },
   'ferrari.maxFanGap': { max: 100 },
   'ferrari.warnFanGap': { max: 100 },
+  'aduo.baseUpgrades': { int: true },
+  'aduo.tier1Upgrades': { int: true },
+  'aduo.tier2Upgrades': { int: true },
+  'aduo.tier1WeeksMul': { min: 0.1, max: 2 },
+  'aduo.tier2WeeksMul': { min: 0.1, max: 2 },
 };
 
 /**
@@ -338,6 +343,13 @@ function normalizeRules(ctx: Ctx, patches: Array<{ source: string; data: unknown
       delete rules.puAllocation[pt];
     }
   }
+  rules.aduo.parts = rules.aduo.parts.filter(pt => {
+    if (rules.parts[pt]) return true;
+    ctx.warn('rules.aduo.parts', `规则中没有零件类型「${pt}」，已忽略`);
+    return false;
+  });
+  if (!rules.parts[rules.aduo.measurePart]) ctx.warn('rules.aduo.measurePart', `规则中没有零件类型「${rules.aduo.measurePart}」，ADUO 不会评估`);
+  if (rules.aduo.tier2Deficit < rules.aduo.tier1Deficit) ctx.warn('rules.aduo.tier2Deficit', '二档门槛低于一档门槛，二档会覆盖一档');
   return rules;
 }
 
@@ -407,6 +419,7 @@ function normalizeTeam(ctx: Ctx, raw: unknown, index: number, rules: Rules): Tea
     color: ctx.str(raw, 'color', path, { def: '#888888' }),
     principal: ctx.str(raw, 'principal', path),
     engine: ctx.str(raw, 'engine', path),
+    worksTeam: ctx.bool(raw, 'worksTeam', false),
     base: ctx.str(raw, 'base', path),
     funds: ctx.num(raw, 'funds', path, { def: 50 }),
     sponsorIncome: ctx.num(raw, 'sponsorIncome', path, { def: 4, min: 0 }),
@@ -614,6 +627,20 @@ export function normalizeDatabase(sources: RawSource[]): NormalizeResult & { can
   });
 
   const teams = mergeById(ctx, teamItems, 'teams');
+  // 每个动力单元厂商只能有一支厂商车队
+  const worksByEngine = new Map<string, string>();
+  for (const t of teams) {
+    if (!t.worksTeam) continue;
+    if (!t.engine) {
+      ctx.source = '车队（合并后）';
+      ctx.warn(`teams.${t.id}.worksTeam`, '没有填写 engine，不能作为厂商车队，已忽略');
+      t.worksTeam = false;
+    } else if (worksByEngine.has(t.engine)) {
+      ctx.source = '车队（合并后）';
+      ctx.warn(`teams.${t.id}.worksTeam`, `动力单元「${t.engine}」已有厂商车队 ${worksByEngine.get(t.engine)}，已忽略`);
+      t.worksTeam = false;
+    } else worksByEngine.set(t.engine, t.id);
+  }
   const drivers = mergeById(ctx, driverItems, 'drivers');
   const tracks = mergeById(ctx, trackItems, 'tracks');
   // 赛历 id 去重
