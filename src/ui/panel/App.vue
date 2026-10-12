@@ -204,9 +204,10 @@ function selectMobileTab(tab: string) {
 .content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 12px;
 }
-.mobile-more { display: none; }
+.mobile-more { display: grid; gap: 8px; }
 .readonly-lock {
   border: 0;
   margin: 0;
@@ -242,10 +243,11 @@ function selectMobileTab(tab: string) {
   border-left-color: var(--red);
 }
 @media (max-width: 767px) {
+  .broadcast-shell { flex-direction: column; }
   .top { min-height: 56px; height: 56px; padding: 0 8px 0 0; flex-wrap: nowrap; gap: 8px; }
   .team-badge { height: 56px; width: 60px; min-width: 60px; border-radius: 0; font-size: 15px; }
   .top .grow { min-width: 0; overflow: hidden; }.title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }.title .muted { display: none; }.top .small.muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.actions { margin-left: 0; flex-wrap: nowrap; }.actions button:not(.primary) { display: none; }.actions .primary { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 6px 8px; font-size: 11px; }
-  .tabs { display: none; }.content { padding: 10px 12px calc(var(--tabbar-h) + 16px); }.mobile-more { display: grid; gap: 8px; }.mobile-more button { text-align: left; }
+  .tabs { display: none; }.content { padding: 10px 12px calc(var(--tabbar-h) + 16px); }.mobile-more button { text-align: left; }
   .toasts { bottom: calc(var(--tabbar-h) + 10px); }
 }
 </style>

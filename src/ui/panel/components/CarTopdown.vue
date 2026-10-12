@@ -14,8 +14,13 @@ const emit = defineEmits<{ select: [partType: string] }>();
 const byType = computed(() => new Map(props.parts.map(part => [part.type, part])));
 const locked = computed(() => new Set(props.lockedParts ?? []));
 const range = computed(() => {
-  const values = props.parts.map(part => part.perf);
-  return values.length ? { min: Math.min(...values), max: Math.max(...values) } : { min: 0, max: 1 };
+  const values = props.parts.filter(part => !locked.value.has(part.type)).map(part => part.perf);
+  if (!values.length) return { min: 0, max: 1 };
+  const low = Math.min(...values);
+  const high = Math.max(...values);
+  const span = Math.max(5, high - low);
+  const middle = (low + high) / 2;
+  return { min: middle - span / 2, max: middle + span / 2 };
 });
 
 function perfClass(part: PartView | undefined, type: string): string {

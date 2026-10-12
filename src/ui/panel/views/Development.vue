@@ -96,7 +96,7 @@ const matrix = computed(() => {
             :locked-parts="lockedParts"
             @select="partType = $event"
           />
-          <div class="tiny muted">颜色来自已公开的当前性能；待验证部件只使用预估值。虚线表示研发中。</div>
+          <div class="tiny muted">颜色表示相对本车可研发部件的公开性能；待验证部件只使用预估值。虚线表示研发中。</div>
         </div>
         <div class="rnd-controls">
       <div class="row">
@@ -229,6 +229,7 @@ const matrix = computed(() => {
   gap: 14px;
 }
 .blueprint-wrap {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;

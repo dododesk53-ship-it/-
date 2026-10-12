@@ -3,6 +3,7 @@
  * 前端只读视图、只通过动作修改存档，保证所有规则都在引擎里。
  */
 import {
+  aduoWeeksMul,
   engineLabel,
   homologationsLeft,
   homologationsTotal,
@@ -358,7 +359,7 @@ function aduoView(state: GameState): AduoView {
     tier: dev.aduoTier ?? 0,
     tierName: tierName(dev.aduoTier ?? 0),
     capBonus: dev.aduoCapBonus ?? 0,
-    weeksMultiplier: (dev.aduoTier ?? 0) >= 2 ? r.tier2WeeksMul : (dev.aduoTier ?? 0) === 1 ? r.tier1WeeksMul : 1,
+    weeksMultiplier: aduoWeeksMul(state, dev, r.measurePart),
     developmentParts: [...r.parts],
     evalRounds: [...r.evalRounds].sort((a, b) => a - b),
     nextEvalRound: nextEvalRound(state),

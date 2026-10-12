@@ -149,13 +149,14 @@ E2E 中发现并已修复的问题：
    - 已实现 `TimingTower.vue`、`CarTopdown.vue`、`AduoCard.vue`、`MobileTabBar.vue`，并把转播设计令牌合并到面板与 HUD 样式。
    - 排名塔、赛车热点和 ADUO 卡都读取实时 `GameView` 数据；未验证零件只显示预估值，不向前端暴露真实性能。
    - `src/tavern/panelHost.ts` 已在手机宽度使用带安全区边距的近全屏面板；桌面继续使用可拖动浮动面板。
-   - `npm run typecheck`、`npm test`（121 项）和 `npm run build` 已通过。仍需用 980×720 和 390×844 浏览器尺寸检查，并在真实 SillyTavern 中检查 HUD 和 iframe 高度。
+   - `npm run typecheck`、`npm test`（124 项）和 `npm run build` 已通过。980×720 与 390×844 浏览器检查已通过；仍需在真实 SillyTavern 中检查 HUD 和 iframe 高度。
    - 设计稿中的阿斯顿·马丁 / 本田 ADUO、摩纳哥第 8 站、积分和比赛顺序都是示例，不是真实存档数据。
 
 12. **本次停止点**：
    - 已完成：真实 2026 阵容、圈速差距校准、法拉利与 ADUO 后端、F1 TV 风格 Vue 面板与 HUD、手机近全屏面板、构建产物。
    - 法拉利世界书已补充底盘、动力单元、项目工程、空气动力、赛道工程、比赛策略和两位车手比赛工程师等关键人员。
-   - 未完成：界面浏览器测试；ADUO 与界面改动的第二轮代码审查；真实 SillyTavern 端到端测试。
+   - 已完成：界面第二轮代码审查；980×720 与 390×844 浏览器测试；排名塔、手机导航和赛车热点的组件测试。
+   - 未完成：真实 SillyTavern 端到端测试。
 
 ## 7. 建议的端到端测试步骤
 

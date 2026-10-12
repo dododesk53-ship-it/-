@@ -156,8 +156,13 @@ h3 {
   min-width: 150px;
 }
 .grid {
+  width: 100%;
+  min-width: 0;
   display: grid;
   gap: 12px;
+}
+.grid > * {
+  min-width: 0;
 }
 .g2 {
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -199,6 +204,10 @@ h3 {
 }
 .stack > * + * {
   margin-top: 12px;
+}
+.stack,
+.stack-s {
+  min-width: 0;
 }
 .stack-s > * + * {
   margin-top: 6px;
