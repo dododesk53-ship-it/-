@@ -30,22 +30,24 @@ export function resolveAiMarket(state: GameState, playerTeamId = state.meta.play
         .filter(d => projectedOwner(d.id) === null)
         .filter(d => !d.teamId || d.contractEnd < window.targetYear)
         .sort((a, b) => a.id.localeCompare(b.id));
-      const candidate = incumbent?.teamId === teamId && projectedOwner(incumbent.id) === null && !window.agreements.some(a => a.personId === incumbent.id) ? incumbent : available[0];
-      if (!candidate) continue;
-      const profile = window.candidateProfiles[candidate.id];
-      const salary = Math.round(Math.max(candidate.salary || 0.5, profile?.askingSalary ?? 0.5) * 130) / 100;
-      offerDriverContract(state, teamId, { windowId: window.id, marketRevision: market.revision, personId: candidate.id, annualSalary: salary, years: Math.max(1, profile?.preferredYears ?? 1), role: 'race', slot: car.slot });
+      const candidates = incumbent?.teamId === teamId && projectedOwner(incumbent.id) === null && !window.agreements.some(a => a.personId === incumbent.id) ? [incumbent, ...available.filter(d => d.id !== incumbent.id)] : available;
+      for (const candidate of candidates) {
+        const profile = window.candidateProfiles[candidate.id];
+        const salary = Math.round(Math.max(candidate.salary || 0.5, profile?.askingSalary ?? 0.5) * 130) / 100;
+        if (offerDriverContract(state, teamId, { windowId: window.id, marketRevision: market.revision, personId: candidate.id, annualSalary: salary, years: Math.max(1, profile?.preferredYears ?? 1), role: 'race', slot: car.slot }).ok) break;
+      }
     }
     for (const role of STAFF_ROLES) {
       if (roster.staff[role]) continue;
       const incumbent = team.staff[role];
-      const candidate = incumbent?.id && !window.agreements.some(a => a.personId === incumbent.id)
-        && projectedOwner(incumbent.id) === null ? incumbent
-        : Object.values(market.freeStaff).filter(s => s.role === role && !!s.id && projectedOwner(s.id) === null && !window.agreements.some(a => a.personId === s.id)).sort((a, b) => (a.id ?? '').localeCompare(b.id ?? ''))[0];
-      if (!candidate?.id) continue;
-      const profile = window.candidateProfiles[candidate.id];
-      const salary = Math.round(Math.max(candidate.salary || 0.3, profile?.askingSalary ?? 0.3) * 130) / 100;
-      offerStaffContract(state, teamId, { windowId: window.id, marketRevision: market.revision, personId: candidate.id, annualSalary: salary, years: Math.max(1, profile?.preferredYears ?? 1) }, role as StaffRole);
+      const availableStaff = Object.values(market.freeStaff).filter(s => s.role === role && !!s.id && projectedOwner(s.id) === null && !window.agreements.some(a => a.personId === s.id)).sort((a, b) => (a.id ?? '').localeCompare(b.id ?? ''));
+      const candidates = incumbent?.id && !window.agreements.some(a => a.personId === incumbent.id) && projectedOwner(incumbent.id) === null ? [incumbent, ...availableStaff.filter(s => s.id !== incumbent.id)] : availableStaff;
+      for (const candidate of candidates) {
+        if (!candidate.id) continue;
+        const profile = window.candidateProfiles[candidate.id];
+        const salary = Math.round(Math.max(candidate.salary || 0.3, profile?.askingSalary ?? 0.3) * 130) / 100;
+        if (offerStaffContract(state, teamId, { windowId: window.id, marketRevision: market.revision, personId: candidate.id, annualSalary: salary, years: Math.max(1, profile?.preferredYears ?? 1) }, role as StaffRole).ok) break;
+      }
     }
   }
   const complete = Object.values(window.projectedRosters).every(roster => Object.values(roster.raceSeats).every(Boolean) && STAFF_ROLES.every(role => !!roster.staff[role]));

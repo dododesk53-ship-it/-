@@ -592,6 +592,7 @@ export function startNextSeason(state: GameState, rng: Rng): Outcome {
   // Existing saves and callers that never touched the new market retain the
   // historical rollover behaviour. Once a player makes any market decision,
   // the normal explicit AI-resolution and roster-completeness gates apply.
+  const closingMarket = state.market?.window;
   retainUntouchedMarket(state);
   const close = closeMarket(state);
   if (!close.ok) return fail(close.message);
@@ -620,6 +621,12 @@ export function startNextSeason(state: GameState, rng: Rng): Outcome {
     if (team.isPlayer && cancelled.length) addNews(state, '研发', `新赛季新车：${cancelled.map(p => p.label).join('、')} 随旧车一起终止。`);
     team.costCapSpent = 0;
     team.aeroHours = 0;
+  }
+  if (state.rules.costCapIncludesSalaries && closingMarket?.targetYear === state.season.year) {
+    for (const escrow of closingMarket.escrow) {
+      const team = state.teams[escrow.payerTeamId];
+      team.costCapSpent = round2(team.costCapSpent + escrow.amount);
+    }
   }
   syncCustomerPu(state);
   resetAduoSeason(state);

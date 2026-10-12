@@ -53,6 +53,8 @@ describe('确定性合同市场', () => {
     expect(quote.blockers).not.toContain('候选人已在预计阵容中');
     expect(quote.buyout).toBeGreaterThan(0);
     expect(quote.replacedPersonId).toBe(ownSeat);
+    const own = previewContractOffer(state, 'team_c', { windowId: window.id, marketRevision: state.market!.revision, personId: ownSeat, annualSalary: 100, years: 2, role: 'race', slot: 1 }, 'driver');
+    expect(own.buyout).toBe(0);
   });
 
   it('keeps AI ownership local and stays unresolved while any roster is incomplete', () => {
@@ -84,12 +86,14 @@ describe('确定性合同市场', () => {
     const fresh = newTestGame();
     fresh.teams.team_c.funds = 1_000_000;
     const freshWindow = fresh.market!.window!;
-    const renewal = dispatch(fresh, { type: 'OFFER_STAFF_CONTRACT', windowId: freshWindow.id, marketRevision: fresh.market!.revision, candidateId: fresh.teams.team_c.staff[role].id!, role, annualSalary: 100, years: 2 });
+    const freeStaffId = 'fictional-technicalDirector-1';
+    const renewal = dispatch(fresh, { type: 'OFFER_STAFF_CONTRACT', windowId: freshWindow.id, marketRevision: fresh.market!.revision, candidateId: freeStaffId, role, annualSalary: 100, years: 2 });
     expect(renewal.ok).toBe(true);
     renewal.state.market!.window!.aiResolved = true;
     expect(closeMarket(renewal.state).ok).toBe(true);
     expect(renewal.state.teams.team_c.staff[role].salary).toBe(100);
     expect(renewal.state.teams.team_c.staff[role].contractEnd).toBe(fresh.season.year + 1);
+    expect(renewal.state.market!.freeStaff[freeStaffId]).toBeUndefined();
   });
 
   it('migrates market rules on modern saves and does not mutate views', () => {

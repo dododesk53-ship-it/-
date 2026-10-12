@@ -41,7 +41,7 @@ async function advance(until: 'next_lap' | 'next_decision') {
 }
 async function tactics() {
   if (!live.value) return;
-  await act({ type: 'SET_RACE_TACTICS', sessionId: live.value.id, expectedRevision: live.value.revision, drivers: drivers.value.map(d => ({ driverId: d.id, paceMode: choice(d.id).paceMode, energyMode: choice(d.id).energyMode, pitTiming: choice(d.id).pitTiming })), orders: { ...orders } });
+  await act({ type: 'SET_RACE_TACTICS', sessionId: live.value.id, expectedRevision: live.value.revision, drivers: drivers.value.filter(d => live.value?.timing.find(t => t.driverId === d.id)?.status === 'running').map(d => ({ driverId: d.id, paceMode: choice(d.id).paceMode, energyMode: choice(d.id).energyMode, pitTiming: choice(d.id).pitTiming })), orders: { ...orders } });
 }
 async function resolve() {
   if (!live.value?.pendingDecision) return;

@@ -210,7 +210,7 @@ export interface LiveRaceView {
   weather: { rain: number; surface: 'dry' | 'damp' | 'wet'; forecast: import('./types').RaceForecast };
   timing: Array<{ driverId: string; teamId: string; pos: number | null; status: 'running' | 'dnf'; gap: string; tyre: string; tyreAge: number; pits: number }>;
   playerCars: Array<{ driverId: string; tyre: string; tyreAge: number; damage: boolean; partial: boolean; energy: number; paceMode: string; energyMode: string }>;
-  events: Array<{ id: string; lap: number; type: string; text: string; drivers: string[]; key: boolean }>;
+  events: Array<{ id: string; lap: number; type: string; text: string; drivers: string[]; driverNames: string[]; key: boolean }>;
   pendingDecision: { id: string; lap: number; reasons: string[]; eligibleDriverIds: string[]; expectedPitLoss: number } | null;
   teamOrders: import('./types').TeamOrders;
 }
@@ -703,7 +703,7 @@ function buildWeekendView(state: GameState): WeekendView | null {
             const names = event.drivers.map(id => state.drivers[id]?.short ?? state.drivers[id]?.name ?? id);
             let text = event.text;
             event.drivers.forEach((id, index) => { text = text.replaceAll(id, names[index]); });
-            return { ...event, text, drivers: names };
+            return { ...event, text, drivers: event.drivers, driverNames: names };
           }),
           teamOrders: { ...live.teamOrders },
           pendingDecision: live.pendingDecision ? { id: live.pendingDecision.id, lap: live.pendingDecision.lap, reasons: live.pendingDecision.reasons, eligibleDriverIds: live.pendingDecision.eligibleDriverIds, expectedPitLoss: (track?.pitLoss ?? 0) * (live.scLeft > 0 ? .5 : live.vscLeft > 0 ? .7 : 1) } : null,

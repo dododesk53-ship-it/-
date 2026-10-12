@@ -47,7 +47,16 @@ export function migrateState(state: GameState): GameState {
     const live = state.weekend.liveRace;
     // Do not attempt to resume malformed or incompatible private simulation data.
     if (live.version !== 1 || !live.id || !Array.isArray(live.weatherTrajectory) || !live.cars || !Number.isFinite(live.rngState) || live.completedLaps < 0 || live.completedLaps > live.totalLaps) state.weekend.liveRace = null;
-    else live.strategistSkill ??= state.teams[state.meta.playerTeamId]?.staff.strategist.skill ?? 50;
+    else {
+      live.strategistSkill ??= state.teams[state.meta.playerTeamId]?.staff.strategist.skill ?? 50;
+      for (const car of Object.values(live.cars)) {
+        const driver = state.drivers[car.driverId];
+        car.trust ??= driver?.trust ?? 50;
+        car.ego ??= driver?.ego ?? 50;
+        car.stayOutUntilLap ??= 0;
+        car.pendingCompound ??= null;
+      }
+    }
   }
   // ADUO（2026-10 新增）：旧存档没有厂商车队信息，按「各车队自行研发」处理
   if (state.rules.puAllocation && !state.rules.aduo) state.rules.aduo = deepClone(DEFAULT_RULES.aduo);

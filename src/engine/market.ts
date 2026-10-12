@@ -235,7 +235,7 @@ export function previewContractOffer(state: GameState, teamId: string, terms: Co
     else replaced = roster.staff[staffRole];
   }
   const fromTeamId = currentOwner(state, terms.personId, kind);
-  const buyout = buyoutFor(state, kind, terms.personId, window.targetYear, fromTeamId);
+  const buyout = fromTeamId === teamId ? 0 : buyoutFor(state, kind, terms.personId, window.targetYear, fromTeamId);
   const severance = replaced && replaced !== terms.personId ? buyoutFor(state, kind, replaced, window.targetYear, teamId) : 0;
   const profile = window.candidateProfiles[terms.personId] ?? preference(terms.personId, (person as { salary: number }).salary || 1);
   const strength = window.strengthByTeam[teamId] ?? 50;
@@ -284,12 +284,27 @@ function acceptOffer(state: GameState, teamId: string, quote: ContractQuote, kin
   if (quote.candidateDecision !== 'accept') return fail('候选人拒绝了当前报价');
   const market = ensureMarket(state); const window = market.window!; const terms = quote.terms;
   const target = window.projectedRosters[teamId];
+  const cancelAgreement = (personId: string) => {
+    const old = window.agreements.find(a => a.personId === personId);
+    if (!old) return;
+    window.agreements = window.agreements.filter(a => a !== old);
+    // Pending escrow was paid at signing but never settled to a recipient. Return
+    // exactly this agreement's matching charges and remove its cap reservation.
+    const amounts = new Set([old.buyout, old.severance].filter(Boolean));
+    const cancelled = window.escrow.filter(e => e.payerTeamId === old.toTeamId && !e.settled && amounts.has(e.amount));
+    for (const escrow of cancelled) {
+      state.teams[escrow.payerTeamId].funds = round2(state.teams[escrow.payerTeamId].funds + escrow.amount);
+    }
+    window.escrow = window.escrow.filter(e => !cancelled.includes(e));
+    window.releases = window.releases.filter(r => r.personId !== personId);
+  };
   for (const roster of Object.values(window.projectedRosters)) detachProjected(roster, terms.personId);
   if (kind === 'driver') {
     if (terms.role === 'race') target.raceSeats[String(terms.slot)] = terms.personId;
     else target.reserveIds.push(terms.personId);
   } else target.staff[staffRole!] = terms.personId;
   if (quote.replacedPersonId && quote.replacedPersonId !== terms.personId) {
+    cancelAgreement(quote.replacedPersonId);
     detachProjected(target, quote.replacedPersonId);
     window.releases.push({ id: `release-${window.id}-${quote.replacedPersonId}`, personKind: kind, personId: quote.replacedPersonId, teamId, effectiveYear: window.targetYear, severance: quote.severance });
   }
@@ -353,6 +368,9 @@ export function closeMarket(state: GameState): MarketOutcome {
     if (escrow.recipientTeamId) state.teams[escrow.recipientTeamId].funds = round2(state.teams[escrow.recipientTeamId].funds + escrow.amount);
     escrow.settled = true;
   }
+  if (state.rules.costCapIncludesSalaries && window.targetYear <= state.season.year) {
+    for (const escrow of window.escrow) state.teams[escrow.payerTeamId].costCapSpent = round2(state.teams[escrow.payerTeamId].costCapSpent + escrow.amount);
+  }
   // Snapshot staff objects before overwriting inline slots. This makes transfers
   // and releases true ownership moves rather than duplicate mutable copies.
   const staffPool = new Map<string, StaffMember>();
@@ -366,7 +384,8 @@ export function closeMarket(state: GameState): MarketOutcome {
     for (const id of roster.reserveIds) { const d = state.drivers[id]; if (d) { d.teamId = teamId; d.role = 'reserve'; } }
     for (const role of STAFF_ROLES) {
       const id = roster.staff[role]!; const source = staffPool.get(id); if (!source) return fail(`找不到员工 ${id}`);
-      team.staff[role] = { ...source, id, role };
+      const agreement = window.agreements.find(a => a.personKind === 'staff' && a.personId === id);
+      team.staff[role] = agreement ? { ...source, id, role, salary: agreement.annualSalary, contractStart: agreement.startYear, contractEnd: agreement.endYear } : { ...source, id, role };
       employedStaff.add(id);
     }
   }

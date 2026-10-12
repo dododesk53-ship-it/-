@@ -4,6 +4,7 @@ import { buildView } from '../../src/engine/view';
 import { buildStatePrompt } from '../../src/engine/prompt';
 import { Rng } from '../../src/engine/rng';
 import { createForecast } from '../../src/engine/raceWeather';
+import { migrateState } from '../../src/engine/migrate';
 
 describe('resumable live race', () => {
   function raceReady(seed = 702): ReturnType<typeof newTestGame> {
@@ -72,6 +73,30 @@ describe('resumable live race', () => {
     const result = act(started, { type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id, drivers: [{ driverId: running.driverId, pit: 'auto' }] });
     expect(result.weekend!.liveRace?.pendingDecision).toBeNull();
     expect(result.weekend!.liveRace?.cars[retired.driverId].status).toBe('dnf');
+  });
+
+  it('allows tactical updates after a teammate retires by submitting running cars only', () => {
+    const launched = act(raceReady(), { type: 'START_RACE', kind: 'race' });
+    const grid = launched.weekend!.liveRace!;
+    const started = act(launched, { type: 'RESOLVE_RACE_DECISION', sessionId: grid.id, expectedRevision: grid.revision, windowId: grid.pendingDecision!.id, drivers: Object.values(grid.cars).filter(c => c.player).map(c => ({ driverId: c.driverId, pit: 'auto' })) });
+    const live = started.weekend!.liveRace!;
+    const retired = Object.values(live.cars).find(c => c.player)!;
+    retired.status = 'dnf';
+    const running = Object.values(live.cars).find(c => c.player && c.status === 'running')!;
+    const outcome = tryAct(started, { type: 'SET_RACE_TACTICS', sessionId: live.id, expectedRevision: live.revision, drivers: [{ driverId: running.driverId, paceMode: 'push', energyMode: 'deploy', pitTiming: 'early' }] });
+    expect(outcome.ok).toBe(true);
+    expect(outcome.state.weekend!.liveRace!.cars[running.driverId].plan.paceMode).toBe('push');
+  });
+
+  it('migrates trust, ego, and stay-out state into an already active session', () => {
+    const started = act(raceReady(), { type: 'START_RACE', kind: 'race' });
+    const live = started.weekend!.liveRace!;
+    const car = Object.values(live.cars)[0] as any;
+    delete car.trust; delete car.ego; delete car.stayOutUntilLap;
+    migrateState(started);
+    expect(car.trust).toBe(started.drivers[car.driverId].trust);
+    expect(car.ego).toBe(started.drivers[car.driverId].ego);
+    expect(car.stayOutUntilLap).toBe(0);
   });
 
   it('does not change tyre without a valid box choice and rejects invalid option values', () => {

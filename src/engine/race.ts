@@ -549,7 +549,8 @@ export function simulateRaceLegacy(state: GameState, rng: Rng, kind: 'race' | 's
 
 function liveEvent(session: LiveRaceState, lap: number, type: RaceEvent['type'], text: string, drivers: string[], key: boolean): string {
   const id = `${session.id}:e${session.events.length + 1}`;
-  if (session.events.length < 70) session.events.push({ id, lap, type, text, drivers, key });
+  // Cap background chatter, never race-control/key/finish narration.
+  if (session.events.length < 70 || key || type === 'finish') session.events.push({ id, lap, type, text, drivers, key });
   return id;
 }
 
@@ -612,7 +613,7 @@ export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sp
       plan, tyre: compounds[0], tyreAge: 0, usedCompounds: [compounds[0]], plannedCompounds: compounds,
       stints: optimizeStints(rules, track, compounds, totalLaps, factor), stintIndex: 0, pits: 0,
       cumulativeTime: index * 0.25, completedLaps: 0, status: 'running', reason: '', bestLap: null,
-      damage: 0, partial: 0, repairPending: false, energy: 65, energyMode: plan.energyMode ?? 'balanced', pendingPit: null, pendingCompound: null,
+      damage: 0, partial: 0, repairPending: false, energy: 65, energyMode: plan.energyMode ?? 'balanced', pendingPit: null, pendingCompound: null, stayOutUntilLap: 0,
     };
     if (entry.team.isPlayer) lapChart[id] = [];
   }
@@ -649,12 +650,29 @@ function tyreMismatch(rules: GameState['rules'], car: LiveRaceCar, wetness: numb
   return Math.max(0, wetness - 0.2) * 8;
 }
 
+function replacementCompound(state: GameState, session: LiveRaceState, car: LiveRaceCar): Compound {
+  if (car.pendingCompound) return car.pendingCompound;
+  if (session.surface === 'wet' || session.wetness >= .55) return state.rules.wetCompound;
+  // A wet-start plan contains W only. On a drying track choose a real dry tyre
+  // instead of pitting repeatedly onto the same mismatched compound.
+  const planned = car.plannedCompounds.slice(car.stintIndex + 1).find(compound => !state.rules.tyres[compound]?.wet);
+  return planned ?? state.rules.dryCompounds[1] ?? state.rules.dryCompounds[0] ?? car.tyre;
+}
+
+function pitTriggerLap(car: LiveRaceCar): number {
+  const base = car.stints[car.stintIndex] ?? Number.MAX_SAFE_INTEGER;
+  return Math.max(2, Math.round(base * (car.plan.pitTiming === 'early' ? .88 : car.plan.pitTiming === 'late' ? 1.12 : 1)));
+}
+
 function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, rng: Rng, force = false): void {
   const track = currentTrack(state);
   const planned = car.stintIndex < car.plannedCompounds.length - 1;
-  // Automatic player strategy and AI use the same observed surface signal.
-  const weatherStop = car.tyreAge >= 2 && tyreMismatch(state.rules, car, session.wetness) > 1.2;
-  const shouldPit = force || car.pendingPit === 'box' || (car.pendingPit !== 'stay_out' && (car.repairPending || weatherStop || (planned && car.tyreAge >= (car.stints[car.stintIndex] ?? session.totalLaps))));
+  const targetCompound = replacementCompound(state, session, car);
+  const currentMismatch = tyreMismatch(state.rules, car, session.wetness);
+  const targetMismatch = tyreMismatch(state.rules, { ...car, tyre: targetCompound }, session.wetness);
+  const weatherStop = car.tyreAge >= 2 && targetCompound !== car.tyre && currentMismatch > 1.2 && targetMismatch + .35 < currentMismatch;
+  const stayOut = car.pendingPit === 'stay_out' && session.lap <= car.stayOutUntilLap;
+  const shouldPit = force || car.pendingPit === 'box' || (!stayOut && (car.repairPending || weatherStop || (planned && car.tyreAge >= pitTriggerLap(car))));
   if (!shouldPit || car.status !== 'running' || session.completedLaps >= session.totalLaps) return;
   const neutral = session.scLeft > 0 ? 0.5 : session.vscLeft > 0 ? 0.7 : 1;
   let stationary = 2.2 + (100 - car.pitCrewSkill) / 100 * 1.3 + rng.range(0, 0.4);
@@ -663,7 +681,7 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
     if (planned) car.stintIndex += 1;
     // A decision can choose a compound, but it takes effect only after this car
     // has actually entered the pits. AI changes respond to the public surface.
-    car.tyre = car.pendingCompound ?? (session.wetness > .42 ? state.rules.wetCompound : car.plannedCompounds[car.stintIndex] ?? car.tyre);
+    car.tyre = targetCompound;
   }
   car.usedCompounds.push(car.tyre); car.tyreAge = 0; car.pits += 1; car.cumulativeTime += track.pitLoss * neutral + stationary;
   liveEvent(session, session.lap, 'pit', `${car.driverId} 进站，换上${state.rules.tyres[car.tyre]?.name ?? car.tyre}`, [car.driverId], car.player);
@@ -698,7 +716,10 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
       car.energy = Math.max(0, Math.min(100, car.energy + energyDelta));
       const energyTime = car.energyMode === 'harvest' ? 0.28 : car.energyMode === 'deploy' && car.energy > 0 ? -0.28 : 0;
       const paceWear = car.plan.paceMode === 'push' ? 1.15 : car.plan.paceMode === 'conserve' ? .88 : 1;
-      let lapTime = base + tyreLapDelta(rules.tyres[car.tyre], car.tyreAge + 1, car.tyreFactor) * paceWear + tyreMismatch(rules, car, session.wetness) + PACE_MODE_TIME[car.plan.paceMode] + car.damage + car.partial + energyTime + rng.normal(0, (0.12 + (100 - car.consistency) * .004) * (1 + session.wetness * .5));
+      // Fuel burn preserves the legacy early-race weight penalty; ERS deployment
+      // remains useful for pace and overtaking but becomes weaker when depleted.
+      const fuel = (session.totalLaps - lap) * .03;
+      let lapTime = base + fuel + tyreLapDelta(rules.tyres[car.tyre], car.tyreAge + 1, car.tyreFactor) * paceWear + tyreMismatch(rules, car, session.wetness) + PACE_MODE_TIME[car.plan.paceMode] + car.damage + car.partial + energyTime + rng.normal(0, (0.12 + (100 - car.consistency) * .004) * (1 + session.wetness * .5));
       if (lap === 1) lapTime += 2.5 + rng.normal(0, .35);
       if (scActive) lapTime = track.baseLap * 1.35 + rng.normal(0, .05);
       else if (vscActive) lapTime = base * 1.25 + rng.normal(0, .05);
@@ -720,8 +741,12 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
           const newWing = dnf || !session.damageLedger.some(d => d.driverId === car.driverId && d.affectedPartTypes.includes('front_wing') && !d.repairedInRace);
           session.damageLedger.push({ id: `${incidentId}:damage`, incidentId, driverId: car.driverId, teamId: car.teamId, slot: car.slot, cause: 'single_car', severity: dnf ? 'dnf' : newWing ? 'wing' : 'minor', affectedPartTypes: newWing ? ['front_wing'] : [], repairedInRace: false });
           incidentIds.push(liveEvent(session, lap, dnf ? 'dnf' : 'error', `${car.driverId}${dnf ? ' 撞车退赛' : ' 前翼受损'}`, [car.driverId], true));
-          if (rng.chance(track.scChance)) { session.scLeft = rng.int(3, 5); session.safetyCars++; incidentIds.push(liveEvent(session, lap, 'sc', '安全车出动！', [], true)); }
-          else { session.vscLeft = 2; incidentIds.push(liveEvent(session, lap, 'vsc', '虚拟安全车（VSC）', [], true)); }
+          // A stopped DNF nearly always needs race control; a recoverable wing
+          // incident only sometimes produces a short VSC/SC interruption.
+          if (dnf || rng.chance(.38)) {
+            if (dnf && rng.chance(track.scChance)) { session.scLeft = rng.int(3, 5); session.safetyCars++; incidentIds.push(liveEvent(session, lap, 'sc', '安全车出动！', [], true)); }
+            else { session.vscLeft = rng.int(1, 2); incidentIds.push(liveEvent(session, lap, 'vsc', '虚拟安全车（VSC）', [], true)); }
+          }
         }
       }
     }
@@ -732,7 +757,10 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
       const ahead = passers[i - 1], behind = passers[i];
       const gap = behind.cumulativeTime - ahead.cumulativeTime;
       const heldTeammates = session.teamOrders.mode === 'hold' && ahead.player && behind.player && ahead.teamId === behind.teamId;
-      if (heldTeammates || gap > rules.overtakeModeGap || !rng.chance(Math.max(0, rules.overtakeModeBonus) * .045)) continue;
+      const ersAdvantage = behind.energyMode === 'deploy' && behind.energy > 5 ? .025 : behind.energyMode === 'harvest' ? -.01 : 0;
+      const probability = Math.max(0, rules.overtakeModeBonus) * .03 + ersAdvantage + (behind.racecraft - ahead.racecraft) * .0015 + (behind.score - ahead.score) * .0008;
+      if (heldTeammates || gap > rules.overtakeModeGap || !rng.chance(clamp(probability, .005, .22))) continue;
+      if (behind.energyMode === 'deploy') behind.energy = Math.max(0, behind.energy - 5);
       behind.cumulativeTime = ahead.cumulativeTime - .1 - rng.range(0, .3);
       liveEvent(session, lap, 'overtake', `${behind.driverId} 超越 ${ahead.driverId}`, [behind.driverId, ahead.driverId], ahead.player || behind.player);
     }
@@ -752,6 +780,10 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
       const severity = roll < .18 ? 'dnf' : roll < .68 && !existingWing ? 'wing' : 'minor';
       session.damageLedger.push({ id: `${incidentId}:damage`, incidentId, driverId: victim.driverId, teamId: victim.teamId, slot: victim.slot, cause: 'collision', severity, affectedPartTypes: severity === 'minor' ? [] : ['front_wing'], repairedInRace: false });
       incidentIds.push(liveEvent(session, lap, severity === 'dnf' ? 'dnf' : 'error', `${behind.driverId} 与 ${ahead.driverId} 争位发生碰撞`, [ahead.driverId, behind.driverId], ahead.player || behind.player));
+      if (severity === 'dnf' ? rng.chance(track.scChance) : severity === 'wing' && rng.chance(.28)) {
+        if (severity === 'dnf' && rng.chance(track.scChance)) { session.scLeft = rng.int(3, 5); session.safetyCars++; incidentIds.push(liveEvent(session, lap, 'sc', '安全车出动！', [], true)); }
+        else { session.vscLeft = rng.int(1, 2); incidentIds.push(liveEvent(session, lap, 'vsc', '虚拟安全车（VSC）', [], true)); }
+      }
       break;
     }
     session.order = liveCars(session).filter(c => c.status === 'running').sort((a, b) => a.cumulativeTime - b.cumulativeTime).map(c => c.driverId);
@@ -775,10 +807,11 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
     for (const car of Object.values(session.cars).filter(c => c.player)) { const pos = session.order.indexOf(car.driverId); session.lapChart[car.driverId]?.push(pos < 0 ? 0 : pos + 1); }
     const fastestCar = liveCars(session).filter(c => c.bestLap !== null).sort((a, b) => (a.bestLap ?? Infinity) - (b.bestLap ?? Infinity))[0];
     if (fastestCar && fastestCar.bestLap !== null) session.fastestLap = { driverId: fastestCar.driverId, time: round3(fastestCar.bestLap), lap };
-    const plannedPlayer = playerCars(session).filter(c => c.repairPending || (c.stintIndex < c.plannedCompounds.length - 1 && c.tyreAge >= (c.stints[c.stintIndex] ?? session.totalLaps)));
+    const plannedPlayer = playerCars(session).filter(c => c.repairPending || (c.stayOutUntilLap < lap && (c.stintIndex < c.plannedCompounds.length - 1 && c.tyreAge >= pitTriggerLap(c) || tyreMismatch(rules, c, session.wetness) > 1.2)));
     const reasons: RaceDecisionWindow['reasons'] = [];
     if (plannedPlayer.length) reasons.push('pit_opportunity');
-    if (Math.abs(session.wetness - previousWetness) > .18 || session.surface !== previousSurface) reasons.push('weather_change');
+    const weatherChanged = Math.abs(session.wetness - previousWetness) > .18 || session.surface !== previousSurface;
+    if (weatherChanged && playerCars(session).some(c => c.stayOutUntilLap < lap)) reasons.push('weather_change');
     if (incidentIds.length) reasons.push('incident');
     if (session.scLeft > 0 && !scActive) reasons.push('sc');
     if (session.vscLeft > 0 && !vscActive) reasons.push('vsc');
@@ -817,7 +850,11 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
   for (const choice of drivers) {
     const car = session.cars[choice.driverId];
     car.pendingPit = choice.pit;
-    if (choice.pit === 'stay_out') liveEvent(session, session.lap, 'info', `${car.driverId} 确认留在赛道上`, [car.driverId], true);
+    if (choice.pit === 'stay_out') {
+      const firstAcknowledgement = car.stayOutUntilLap < session.lap;
+      car.stayOutUntilLap = session.lap + 3;
+      if (firstAcknowledgement) liveEvent(session, session.lap, 'info', `${car.driverId} 确认留在赛道上`, [car.driverId], true);
+    } else car.stayOutUntilLap = 0;
     if (choice.pit === 'box' && choice.compound) {
       car.pendingCompound = choice.compound;
       car.plannedCompounds[car.stintIndex + 1] = choice.compound;

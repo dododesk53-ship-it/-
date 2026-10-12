@@ -766,6 +766,8 @@ export interface LiveRaceCar {
   pendingPit: 'auto' | 'stay_out' | 'box' | null;
   /** Choice is staged until a real pit stop; never changes track position tyre instantly. */
   pendingCompound: Compound | null;
+  /** Prevents a stay-out acknowledgement being immediately re-prompted next lap. */
+  stayOutUntilLap: number;
 }
 
 export interface RaceDamageRecord {
