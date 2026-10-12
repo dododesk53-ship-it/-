@@ -11,7 +11,7 @@ const CSS = `
   max-width:100vw;max-height:100vh;min-width:340px;min-height:300px;display:flex;flex-direction:column;
   background:#0f1115;border:1px solid #2b303b;border-radius:12px;box-shadow:0 24px 64px rgba(0,0,0,.65);overflow:hidden;resize:both}
 #${ROOT_ID}.f1m-hidden{display:none}
-#${ROOT_ID}.f1m-mobile{left:0!important;top:0!important;width:100vw!important;height:100dvh!important;border-radius:0;resize:none;border:0}
+#${ROOT_ID}.f1m-mobile{left:6px!important;top:max(6px,env(safe-area-inset-top))!important;width:calc(100vw - 12px)!important;height:calc(100dvh - max(12px,env(safe-area-inset-top) + env(safe-area-inset-bottom)))!important;border-radius:8px;resize:none;border:1px solid #2b303b}
 #${ROOT_ID} .f1m-titlebar{flex:0 0 38px;display:flex;align-items:center;gap:8px;padding:0 6px 0 12px;
   background:linear-gradient(90deg,#e10600 0,#9e0b0b 28%,#16181d 70%);color:#fff;cursor:move;user-select:none;
   font:600 14px/1 system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;letter-spacing:.5px;touch-action:none}

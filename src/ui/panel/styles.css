@@ -1,16 +1,36 @@
 :root {
-  --bg: #0f1115;
-  --bg2: #161920;
-  --bg3: #1d212b;
-  --line: #2a2f3b;
-  --text: #e8eaef;
-  --muted: #8d93a3;
+  --bg: #07080b;
+  --bg2: #101218;
+  --bg3: #181b23;
+  --bg4: #222631;
+  --line: #232733;
+  --line2: #333949;
+  --text: #f3f4f7;
+  --muted: #8e95a5;
+  --dim: #5c6373;
   --red: #e10600;
-  --green: #2fbf71;
-  --yellow: #f5c518;
+  --green: #1fd17a;
+  --yellow: #ffd60a;
+  --orange: #ff8a1f;
   --blue: #3d8bfd;
+  --purple: #b05cff;
+  --cyan: #7fdcff;
+  --neg: #ff5a5f;
   --team: #e10600;
-  --radius: 10px;
+  --team-soft: color-mix(in srgb, var(--team) 18%, transparent);
+  --team-glow: color-mix(in srgb, var(--team) 60%, transparent);
+  --team-ink: color-mix(in srgb, var(--team) 70%, #fff);
+  --carbon: repeating-linear-gradient(45deg, rgba(255,255,255,.022) 0 2px, transparent 2px 4px), repeating-linear-gradient(-45deg, rgba(0,0,0,.5) 0 2px, transparent 2px 4px), linear-gradient(180deg, #0c0e13, #07080b);
+  --carbon-card: repeating-linear-gradient(45deg, rgba(255,255,255,.016) 0 2px, transparent 2px 4px), linear-gradient(180deg, #12151c, #0d0f14);
+  --font: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Noto Sans CJK SC', sans-serif;
+  --font-display: 'Bahnschrift SemiCondensed', 'Bahnschrift', 'DIN Condensed', 'Roboto Condensed', 'Arial Narrow', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-num: 'Bahnschrift', 'DIN Alternate', 'Roboto Condensed', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --radius: 3px;
+  --skew: -12deg;
+  --tower-w: 212px;
+  --tabbar-h: 64px;
+  --ease: cubic-bezier(.2,.8,.2,1);
+  --t-med: .35s;
   color-scheme: dark;
 }
 * {
@@ -20,9 +40,9 @@ html,
 body {
   margin: 0;
   height: 100%;
-  background: var(--bg);
+  background: var(--carbon);
   color: var(--text);
-  font: 13px/1.5 system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Noto Sans CJK SC', sans-serif;
+  font: 13px/1.5 var(--font);
 }
 #app {
   height: 100%;
@@ -149,10 +169,20 @@ h3 {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 .card {
-  background: var(--bg2);
+  position: relative;
+  background: var(--carbon-card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 12px;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: -1px;
+  bottom: -1px;
+  width: 3px;
+  background: linear-gradient(180deg, var(--team), color-mix(in srgb, var(--team) 25%, transparent));
 }
 .card > h3 {
   margin-bottom: 10px;
@@ -297,4 +327,8 @@ label.field > * {
   .g3 {
     grid-template-columns: 1fr;
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }

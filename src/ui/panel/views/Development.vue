@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { act, money, peek, store } from '../bridge';
+import AduoCard from '../components/AduoCard.vue';
+import CarTopdown from '../components/CarTopdown.vue';
 import type { Ambition, FacilityType } from '../../../engine/types';
 import type { ProjectPreview } from '../../../engine/development';
 
@@ -15,6 +17,8 @@ const partType = ref('');
 const ambition = ref<Ambition>('standard');
 const rush = ref(false);
 const focus = ref(0);
+const selectedCar = computed(() => p.value.cars[0]);
+const lockedParts = computed(() => (v.value.aduo.isCustomer ? ['power_unit', 'ers'] : []));
 
 watch(
   developable,
@@ -81,6 +85,20 @@ const matrix = computed(() => {
 
     <div class="card stack-s">
       <h3>启动新的零件研发</h3>
+      <div class="rnd-layout">
+        <div class="blueprint-wrap">
+          <div class="blueprint-label">{{ team.short }} · 2026 赛车俯视图</div>
+          <CarTopdown
+            v-if="selectedCar"
+            :parts="selectedCar.parts"
+            :projects="p.projects"
+            :selected="partType"
+            :locked-parts="lockedParts"
+            @select="partType = $event"
+          />
+          <div class="tiny muted">颜色来自已公开的当前性能；待验证部件只使用预估值。虚线表示研发中。</div>
+        </div>
+        <div class="rnd-controls">
       <div class="row">
         <label class="field">零件
           <select v-model="partType">
@@ -132,7 +150,11 @@ const matrix = computed(() => {
           </table>
         </div>
       </details>
+        </div>
+      </div>
     </div>
+
+    <AduoCard :aduo="v.aduo" />
 
     <div class="grid g2">
       <div class="card stack-s">
@@ -201,6 +223,22 @@ const matrix = computed(() => {
   border-radius: 8px;
   padding: 10px;
 }
+.rnd-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 38%) minmax(0, 1fr);
+  gap: 14px;
+}
+.blueprint-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.blueprint-label {
+  color: var(--cyan);
+  font: italic 800 12px var(--font-display);
+  letter-spacing: .08em;
+}
+.rnd-controls { min-width: 0; }
 .fac {
   padding: 4px 0;
 }
@@ -221,5 +259,8 @@ const matrix = computed(() => {
 input[type='range'] {
   width: 100%;
   accent-color: var(--team);
+}
+@media (max-width: 640px) {
+  .rnd-layout { grid-template-columns: 1fr; }
 }
 </style>

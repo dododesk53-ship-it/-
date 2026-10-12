@@ -15,7 +15,7 @@
 - 2026-10-12 后端改成 2026 规则（排位 6/6/10、超车模式与 Boost 取代 DRS、内燃机 / 能量回收系统拆分与配额罚退），并写入法拉利车队与「过渡领队」机制，见第 6 节第 8 条。分支 `vorflux/f1-2026-ferrari`。
 - 2026-10-12 车队与车手换成 2026 年真实阵容，并按用户给出的平均单圈差距重新校准，见第 6 节第 9 条。分支 `vorflux/f1-2026-grid-data`。
 - 2026-10-12 已实现 ADUO 后端、动力单元厂商 / 客户车队供应关系和认证升级次数，见第 6 节第 10 条。分支 `vorflux/f1-aduo-ui`。
-- F1 TV 转播风格界面已有完整设计稿，但尚未写入 Vue / HUD，见第 6 节第 11 条。
+- F1 TV 转播风格界面已写入 Vue 面板与 HUD，待完成浏览器和真实 SillyTavern 验证，见第 6 节第 11 条。
 
 ## 2. 交付物
 
@@ -139,23 +139,23 @@ E2E 中发现并已修复的问题：
    - 测试在 `tests/engine/aduo.test.ts`，覆盖客户限制、认证次数、取消返还、客户供件、评估档位、补偿、新赛季、旧存档和重复厂商校验。
    - 第一轮代码审查给出 7/10 高风险并阻止合并。提交 `86a67aa` 已修复审查发现的旧存档计数、门槛取整和评估站次问题。建议下一位开发者再做一次复审。
 
-11. **F1 TV 转播风格界面设计稿**（已完成设计，尚未实现）：
+11. **F1 TV 转播风格界面**（设计与实现已完成）：
    - 全部文件在 `docs/designs/broadcast-ui/`。入口是 `design-plan.json`，设计令牌是 `tokens.css`，赛车线稿是 `car-topdown.svg`。
    - 桌面管理面板：左侧常驻排名塔。比赛时显示实时顺序、差距、轮胎、PIT / DNF / 最快圈；其他页面显示车手或车队积分榜。
    - 手机管理面板：390 px 宽适配，顶部是紧凑排名条；点击后从侧边展开完整排名塔；底部是「总览 / 比赛周末 / 车手 / 赛车 / 研发 / 更多」标签栏。
    - 研发页：2026 赛车俯视线稿有 9 个零件热点（SVG 组 id 为 `part-<partType>`）。热点按玩家可见的零件性能着色，点击后选择研发零件。
    - ADUO 卡：显示厂商 / 客户身份、公开差距、档位、升级次数、预算帽额度、研发周期倍率和下次评估站。客户车队的内燃机与 ERS 显示锁定。
    - HUD：`hud-desktop.html` 与 `hud-phone.html` 各包含正常、法拉利、比赛周末、旧楼层变暗、尚未开局五种状态。
-   - 建议实现组件：`TimingTower.vue`、`CarTopdown.vue`、`AduoCard.vue`、`MobileTabBar.vue`。把 `tokens.css` 合并到面板样式变量，不要把设计稿中的示例数据写死。
-   - `GameView.aduo` 已提供 ADUO 所需数据。排名塔和赛车热点可能需要给 `src/engine/view.ts` 增加最小的公开视图数据。不要向前端暴露未验证零件的真实性能。
-   - `src/tavern/panelHost.ts` 需要在手机宽度使用近全屏面板；桌面保持浮动面板。
-   - 实现后运行 `npm run typecheck`、`npm test`、`npm run build`，再用 980×720 和 390×844 浏览器尺寸检查。还要在真实 SillyTavern 中检查 HUD 和 iframe 高度。
+   - 已实现 `TimingTower.vue`、`CarTopdown.vue`、`AduoCard.vue`、`MobileTabBar.vue`，并把转播设计令牌合并到面板与 HUD 样式。
+   - 排名塔、赛车热点和 ADUO 卡都读取实时 `GameView` 数据；未验证零件只显示预估值，不向前端暴露真实性能。
+   - `src/tavern/panelHost.ts` 已在手机宽度使用带安全区边距的近全屏面板；桌面继续使用可拖动浮动面板。
+   - `npm run typecheck`、`npm test`（121 项）和 `npm run build` 已通过。仍需用 980×720 和 390×844 浏览器尺寸检查，并在真实 SillyTavern 中检查 HUD 和 iframe 高度。
    - 设计稿中的阿斯顿·马丁 / 本田 ADUO、摩纳哥第 8 站、积分和比赛顺序都是示例，不是真实存档数据。
 
 12. **本次停止点**：
-   - 已完成并推送：真实 2026 阵容、用户提供的圈速差距校准、法拉利动力单元设定修正、ADUO 后端、测试、构建产物、界面设计稿。
-   - 未完成：把设计稿实现为 Vue 面板和 HUD；手机全屏 `panelHost`；界面浏览器测试；ADUO 修复后的第二轮代码审查；真实 SillyTavern 端到端测试。
-   - 不要重新做界面设计。直接按 `docs/designs/broadcast-ui/design-plan.json` 和各 HTML 设计稿实现。
+   - 已完成：真实 2026 阵容、圈速差距校准、法拉利与 ADUO 后端、F1 TV 风格 Vue 面板与 HUD、手机近全屏面板、构建产物。
+   - 法拉利世界书已补充底盘、动力单元、项目工程、空气动力、赛道工程、比赛策略和两位车手比赛工程师等关键人员。
+   - 未完成：界面浏览器测试；ADUO 与界面改动的第二轮代码审查；真实 SillyTavern 端到端测试。
 
 ## 7. 建议的端到端测试步骤
 
@@ -191,6 +191,9 @@ npm run dev       # 本地开发页 http://localhost:5174（先 build 一次）
 - 酒馆助手源码与类型定义：https://github.com/N0VI028/JS-Slash-Runner（`@types/`）
 - 编写模板：https://github.com/StageDog/tavern_helper_template
 - MVU 变量框架：https://github.com/MagicalAstrogy/MagVarUpdate（本卡没有使用）
+- 法拉利官方车队与技术管理人员：https://www.ferrari.com/en-EN/formula1/team
+- 法拉利组织调整（塞拉、蒙特基等）：https://www.ferrari.com/en-EN/formula1/articles/organisational-changes
+- 2026 比赛工程师资料：https://www.formula1.com/en/latest/article/hamilton-to-get-new-race-engineer-for-2026-season-as-adami-moves-to-ferrari.1WVOwZfz9mnJ1XKjmgz8Yu
 - 本次实现依赖的几个行为（来自源码阅读）：
   - 酒馆助手只把内容包含 `html>`、`<head>` 或 `<body` 的代码块渲染成前端界面。
   - 角色脚本存放在 `data.extensions.tavern_helper.scripts`（数组）。

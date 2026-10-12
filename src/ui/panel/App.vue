@@ -9,6 +9,8 @@ import Weekend from './views/Weekend.vue';
 import Standings from './views/Standings.vue';
 import Saves from './views/Saves.vue';
 import NewGame from './views/NewGame.vue';
+import TimingTower from './components/TimingTower.vue';
+import MobileTabBar from './components/MobileTabBar.vue';
 
 const tabs = [
   { id: 'overview', label: '总览' },
@@ -40,6 +42,10 @@ async function advance() {
 
 async function narrate() {
   await call(a => a.requestNarration());
+}
+
+function selectMobileTab(tab: string) {
+  store.tab = tab;
 }
 </script>
 
@@ -83,21 +89,32 @@ async function narrate() {
         埃尔坎解除了你的法拉利过渡领队职务：{{ view.ferrari.dismissed }}。本局结束，请在「存档」中读档或重新开局。
       </div>
       <div v-else-if="view.flags.fired" class="notice bad small" style="margin: 0 12px 8px">董事会已解除你的领队职务（剧情）。你仍可以继续游玩或在「存档」中读档。</div>
-      <nav class="tabs">
-        <button v-for="t in tabs" :key="t.id" :class="{ on: store.tab === t.id }" @click="store.tab = t.id">{{ t.label }}</button>
-      </nav>
-      <main class="content">
-        <Saves v-if="store.tab === 'saves'" />
-        <!-- 被法拉利撤职后本局只读：禁用除存档页以外的所有操作控件 -->
-        <fieldset v-else class="readonly-lock" :disabled="!!view.ferrari?.dismissed">
-          <Overview v-if="store.tab === 'overview'" />
-          <Weekend v-else-if="store.tab === 'weekend'" />
-          <Drivers v-else-if="store.tab === 'drivers'" />
-          <Car v-else-if="store.tab === 'car'" />
-          <Development v-else-if="store.tab === 'rnd'" />
-          <Standings v-else-if="store.tab === 'standings'" />
-        </fieldset>
-      </main>
+      <div class="broadcast-shell">
+        <TimingTower :view="view" />
+        <div class="panel-main">
+          <nav class="tabs">
+            <button v-for="t in tabs" :key="t.id" :class="{ on: store.tab === t.id }" @click="store.tab = t.id">{{ t.label }}</button>
+          </nav>
+          <main class="content">
+            <div v-if="store.tab === 'more'" class="mobile-more card">
+              <h3>更多</h3>
+              <button @click="store.tab = 'standings'">积分榜</button>
+              <button @click="store.tab = 'saves'">存档与设置</button>
+            </div>
+            <Saves v-else-if="store.tab === 'saves'" />
+            <!-- 被法拉利撤职后本局只读：禁用除存档页以外的所有操作控件 -->
+            <fieldset v-else class="readonly-lock" :disabled="!!view.ferrari?.dismissed">
+              <Overview v-if="store.tab === 'overview'" />
+              <Weekend v-else-if="store.tab === 'weekend'" />
+              <Drivers v-else-if="store.tab === 'drivers'" />
+              <Car v-else-if="store.tab === 'car'" />
+              <Development v-else-if="store.tab === 'rnd'" />
+              <Standings v-else-if="store.tab === 'standings'" />
+            </fieldset>
+          </main>
+        </div>
+      </div>
+      <MobileTabBar :tab="store.tab" @select="selectMobileTab" />
     </template>
 
     <div class="toasts">
@@ -109,6 +126,18 @@ async function narrate() {
 <style scoped>
 .app {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.broadcast-shell {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+}
+.panel-main {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
 }
@@ -177,6 +206,7 @@ async function narrate() {
   overflow-y: auto;
   padding: 12px;
 }
+.mobile-more { display: none; }
 .readonly-lock {
   border: 0;
   margin: 0;
@@ -210,5 +240,12 @@ async function narrate() {
 }
 .toast.err {
   border-left-color: var(--red);
+}
+@media (max-width: 767px) {
+  .top { min-height: 56px; height: 56px; padding: 0 8px 0 0; flex-wrap: nowrap; gap: 8px; }
+  .team-badge { height: 56px; width: 60px; min-width: 60px; border-radius: 0; font-size: 15px; }
+  .top .grow { min-width: 0; overflow: hidden; }.title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }.title .muted { display: none; }.top .small.muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.actions { margin-left: 0; flex-wrap: nowrap; }.actions button:not(.primary) { display: none; }.actions .primary { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 6px 8px; font-size: 11px; }
+  .tabs { display: none; }.content { padding: 10px 12px calc(var(--tabbar-h) + 16px); }.mobile-more { display: grid; gap: 8px; }.mobile-more button { text-align: left; }
+  .toasts { bottom: calc(var(--tabbar-h) + 10px); }
 }
 </style>
