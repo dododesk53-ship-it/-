@@ -128,6 +128,13 @@ h3 {
   flex: 1;
   min-width: 0;
 }
+/* Header team name/subtitle block: prevent it collapsing to a sliver on narrow
+   viewports when the sibling action button(s) can't shrink. Forces the
+   actions row to wrap to its own line instead of squeezing the title into a
+   near-zero-width column of single characters. */
+.top .grow {
+  min-width: 150px;
+}
 .grid {
   display: grid;
   gap: 12px;
