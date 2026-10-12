@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { applyAiCommands, describeLog, parseAiCommands, stripAiCommands } from '../../src/engine/protocol';
 import { buildStatePrompt } from '../../src/engine/prompt';
-import { advanceUntil, newTestGame } from '../helpers';
+import { buildView } from '../../src/engine/view';
+import { act, advanceUntil, newTestGame } from '../helpers';
 
 describe('AI 指令协议', () => {
   it('宽松解析：JSON 行、数组、单引号、尾逗号、中文 op', () => {
@@ -61,6 +62,21 @@ describe('AI 指令协议', () => {
     applyAiCommands(s, [{ op: 'penalty', driver: 'c2', grid: 2 }], { messageId: 2 });
     expect(JSON.parse(String(s.flags.pendingPenalties)).c2).toBe(2);
   });
+
+  it('同一条消息对同一车手的罚退累计不超过上限，日志记录实际增加的格数', () => {
+    const s = advanceUntil(newTestGame(12), x => x.season.phase === 'practice');
+    const logs = applyAiCommands(
+      s,
+      [
+        { op: 'penalty', driver: 'c1', grid: 5 },
+        { op: 'penalty', driver: 'c1', grid: 5 },
+      ],
+      { messageId: 1 },
+    );
+    expect(s.weekend!.penalties.c1).toBe(s.rules.aiLimits.penalty);
+    expect(logs.filter(l => l.op === 'penalty').map(l => l.applied)).toEqual([5, 0]);
+    expect(logs[1].ok).toBe(false);
+  });
 });
 
 describe('提示词', () => {
@@ -73,6 +89,25 @@ describe('提示词', () => {
     expect(p).toContain('F1M_UPDATE');
     expect(p).toContain('排位');
     expect(p.length).toBeLessThan(4000);
+  });
+
+  it('未验证的新件不会通过赛车属性或性能排名泄露真实收益', () => {
+    let s = newTestGame(31);
+    s = act(s, { type: 'START_PROJECT', partType: 'floor', ambition: 'standard' });
+    s = advanceUntil(s, x => x.teams.team_c.parts.floor.specs.length > 1);
+    s = advanceUntil(s, x => ['pre_race', 'post_race', 'preseason'].includes(x.season.phase) && !x.weekend?.parcFerme);
+    const spec = s.teams.team_c.parts.floor.specs.find(x => x.version === 2)!;
+    expect(spec.verified).toBe(false);
+    s = act(s, { type: 'FIT_PART', slot: 1, partType: 'floor', specId: spec.id });
+    const variant = (perf: number) => {
+      const copy = structuredClone(s);
+      copy.teams.team_c.parts.floor.specs.find(x => x.id === spec.id)!.perf = perf;
+      return copy;
+    };
+    const low = variant(1);
+    const high = variant(100);
+    expect(buildStatePrompt(low)).toBe(buildStatePrompt(high));
+    expect(JSON.stringify(buildView(low))).toBe(JSON.stringify(buildView(high)));
   });
 
   it('正赛前不会泄露正赛天气', () => {

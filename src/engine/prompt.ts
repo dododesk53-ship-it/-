@@ -71,11 +71,11 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
   );
 
   // 赛车
-  const ranking = teamPaceRanking(state, phase !== 'season_end' && track ? track : null);
+  const ranking = teamPaceRanking(state, phase !== 'season_end' && track ? track : null, 'disclosed');
   const paceRank = ranking.findIndex(r => r.teamId === team.id) + 1;
   L.push(`赛车（本站性能全场第 ${paceRank}/${ranking.length}）：`);
   for (const car of team.cars) {
-    const r = carRatings(team, car, rules);
+    const r = carRatings(team, car, rules, 'disclosed');
     const ts = track ? trackScore(r, track).toFixed(1) : '-';
     const unverified = Object.keys(rules.parts)
       .map(pt => team.parts[pt].specs.find(s => s.id === car.fitted[pt]))

@@ -7,7 +7,7 @@ import { charge, prizeFor, settleRace, income } from './finance';
 import { addNarration, addNews, driverName, playerTeam, teamName } from './log';
 import { emptyStandings } from './newgame';
 import { simulateRace, type RaceExtras } from './race';
-import { activeEntries, bestSpec, carRatings, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
+import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
 import type { Rng } from './rng';
 import type { Action, GameState, PartSpec, RaceResult, TeamState } from './types';
 import { clamp, deepClone, money, round1, round2 } from './util';
@@ -148,7 +148,7 @@ export function applyAllocationFairness(state: GameState): string[] {
   if (team.cars.length < 2) return notes;
   const scored = team.cars
     .filter(c => c.driverId)
-    .map(c => ({ car: c, overall: carRatings(team, c, state.rules).overall }))
+    .map(c => ({ car: c, overall: carRatings(team, c, state.rules, 'disclosed').overall }))
     .sort((a, b) => b.overall - a.overall);
   if (scored.length < 2) return notes;
   const top = scored[0];
@@ -407,7 +407,7 @@ function pickReplacement(team: TeamState, pt: string, lost: PartSpec | undefined
   if (lost && (parts.stock[lost.id] ?? 0) > 0) return lost;
   let best: PartSpec | null = null;
   for (const s of parts.specs) {
-    if ((parts.stock[s.id] ?? 0) > 0 && (!best || s.perf > best.perf)) best = s;
+    if ((parts.stock[s.id] ?? 0) > 0 && (!best || disclosedPerf(s) > disclosedPerf(best))) best = s;
   }
   return best;
 }

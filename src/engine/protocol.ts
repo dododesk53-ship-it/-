@@ -241,11 +241,15 @@ export function applyAiCommands(state: GameState, commands: AiCommand[], ctx: Ap
           log({ op: 'penalty', target: cmd.driver ?? '', requested: cmd.grid ?? null, applied: null, reason, ok: false, note: '参数无效' });
           return;
         }
-        const allowed = Math.min(grid, limits.penalty);
+        // 同一条消息里对同一车手的罚退累计不超过上限
+        const allowed = budget(`penalty:${id}`, grid, limits.penalty);
         const phase = state.season.phase;
         const beforeQuali = state.weekend && ['practice', 'sprint_qualifying', 'sprint', 'qualifying'].includes(phase);
+        let added = 0;
         if (beforeQuali && state.weekend) {
-          state.weekend.penalties[id] = Math.min(state.rules.maxGridPenalty, (state.weekend.penalties[id] ?? 0) + allowed);
+          const prev = state.weekend.penalties[id] ?? 0;
+          state.weekend.penalties[id] = Math.min(state.rules.maxGridPenalty, prev + allowed);
+          added = state.weekend.penalties[id] - prev;
         } else {
           let pending: Record<string, number> = {};
           try {
@@ -253,10 +257,20 @@ export function applyAiCommands(state: GameState, commands: AiCommand[], ctx: Ap
           } catch {
             pending = {};
           }
-          pending[id] = Math.min(state.rules.maxGridPenalty, (pending[id] ?? 0) + allowed);
+          const prev = pending[id] ?? 0;
+          pending[id] = Math.min(state.rules.maxGridPenalty, prev + allowed);
+          added = pending[id] - prev;
           state.flags.pendingPenalties = JSON.stringify(pending);
         }
-        log({ op: 'penalty', target: id, requested: grid, applied: allowed, reason, ok: true, note: beforeQuali ? '本站生效' : '下一站生效' });
+        log({
+          op: 'penalty',
+          target: id,
+          requested: grid,
+          applied: added,
+          reason,
+          ok: added > 0,
+          note: added > 0 ? (beforeQuali ? '本站生效' : '下一站生效') : '已达到罚退上限',
+        });
         return;
       }
       default:

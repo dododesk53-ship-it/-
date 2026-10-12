@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { simulateRace } from '../../src/engine/race';
+import { applyPenalties } from '../../src/engine/weekend';
 import { Rng } from '../../src/engine/rng';
 import { strategyOptions, validatePlan, degFactor } from '../../src/engine/strategy';
 import type { GameState } from '../../src/engine/types';
@@ -126,5 +127,17 @@ describe('策略预测', () => {
     const t = s.tracks.t_fast;
     const base = { driverTyre: 80, carTyre: 80, knowledge: 0 };
     expect(degFactor(t, { ...base, paceMode: 'push' })).toBeGreaterThan(degFactor(t, { ...base, paceMode: 'conserve' }));
+  });
+});
+
+describe('罚退', () => {
+  it('多名车手被罚时每人都后移规定的格数', () => {
+    expect(applyPenalties(['A', 'B', 'C', 'D'], { A: 2, B: 2 })).toEqual(['C', 'D', 'A', 'B']);
+    expect(applyPenalties(['A', 'B', 'C', 'D'], { A: 1 })).toEqual(['B', 'A', 'C', 'D']);
+    // 目标位置相同：排位成绩好的在前
+    expect(applyPenalties(['A', 'B', 'C', 'D'], { A: 2, B: 1 })).toEqual(['C', 'D', 'A', 'B']);
+    // 超出发车格数时排到最后
+    expect(applyPenalties(['A', 'B', 'C'], { A: 10 })).toEqual(['B', 'C', 'A']);
+    expect(applyPenalties(['A', 'B', 'C'], {})).toEqual(['A', 'B', 'C']);
   });
 });

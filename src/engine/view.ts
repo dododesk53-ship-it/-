@@ -14,7 +14,7 @@ import {
 } from './development';
 import { annualSalaries, capRemaining } from './finance';
 import { describeLog } from './protocol';
-import { carRatings, driverOverall, findSpec, moraleLabel, teamPaceRanking, trackScore, type CarRatings } from './ratings';
+import { carRatings, disclosedPerf, driverOverall, findSpec, moraleLabel, teamPaceRanking, trackScore, type CarRatings } from './ratings';
 import { nextActionFor, sortedDrivers, sortedTeams, type NextAction } from './season';
 import { degFactor, effectiveCliff, strategyOptions, type StrategyOption } from './strategy';
 import type {
@@ -205,7 +205,7 @@ export interface GameView {
 
 function partView(team: TeamState, type: string, specId: string, name: string): PartView {
   const s = findSpec(team, type, specId) ?? team.parts[type]?.specs[0];
-  const perf = s ? (s.verified ? s.perf : s.expected ? round1((s.expected[0] + s.expected[1]) / 2) : s.perf) : 0;
+  const perf = s ? disclosedPerf(s) : 0;
   return {
     type,
     name,
@@ -263,14 +263,14 @@ export function buildView(state: GameState): GameView {
   const track = roundDef ? state.tracks[roundDef.trackId] : undefined;
   const phase: Phase = state.season.phase;
   const showTrack = phase !== 'season_end' && !!track;
-  const paceRanking = teamPaceRanking(state, showTrack ? track! : null);
+  const paceRanking = teamPaceRanking(state, showTrack ? track! : null, 'disclosed');
   const teamRows = sortedTeams(state);
   const driverRows = sortedDrivers(state);
   const driverPos = new Map(driverRows.map((id, i) => [id, i + 1]));
 
   const partNames = Object.fromEntries(Object.entries(rules.parts).map(([k, v]) => [k, v.name]));
   const cars: CarView[] = team.cars.map(c => {
-    const ratings = carRatings(team, c, rules);
+    const ratings = carRatings(team, c, rules, 'disclosed');
     return {
       slot: c.slot,
       driverId: c.driverId,
@@ -293,7 +293,7 @@ export function buildView(state: GameState): GameView {
         specId: s.id,
         version: s.version,
         count,
-        perf: s.verified ? s.perf : s.expected ? round1((s.expected[0] + s.expected[1]) / 2) : s.perf,
+        perf: disclosedPerf(s),
         rel: s.rel,
         verified: s.verified,
         expected: s.expected,
@@ -306,6 +306,11 @@ export function buildView(state: GameState): GameView {
     const { trueGain: _hidden, ...rest } = p;
     return { ...rest, progress: round1(((p.weeksTotal - p.weeksLeft) / Math.max(1, p.weeksTotal)) * 100) };
   });
+
+  // 原始零件规格里未验证新件的真实性能要遮住，面板只能拿到预估值
+  const maskedParts = Object.fromEntries(
+    Object.entries(team.parts).map(([pt, parts]) => [pt, { ...parts, specs: parts.specs.map(s => ({ ...s, perf: disclosedPerf(s) })) }]),
+  );
 
   const rndOptions: ProjectPreview[] = [];
   for (const pt of Object.keys(rules.parts)) {
@@ -332,7 +337,7 @@ export function buildView(state: GameState): GameView {
           }
         : null,
     player: {
-      team: { ...team, projects: projects as Project[] },
+      team: { ...team, parts: maskedParts, projects: projects as Project[] },
       rank: rankOfTeam(state, team.id),
       points: state.standings.teams[team.id]?.points ?? 0,
       leaderPoints: Math.max(0, ...Object.values(state.standings.teams).map(t => t.points)),
@@ -356,7 +361,7 @@ export function buildView(state: GameState): GameView {
     },
     teams: teamRows.map((tid, i) => {
       const t = state.teams[tid];
-      const best = Math.max(...t.cars.map(c => carRatings(t, c, rules).overall), 0);
+      const best = Math.max(...t.cars.map(c => carRatings(t, c, rules, 'disclosed').overall), 0);
       const pr = paceRanking.findIndex(p => p.teamId === tid);
       return {
         id: tid,
@@ -459,7 +464,7 @@ function buildWeekendView(state: GameState): WeekendView | null {
       const plan = w.plans[d.id];
       const setup = w.setup[d.id];
       if (!plan || !setup) continue;
-      const ratings = carRatings(team, car, state.rules);
+      const ratings = carRatings(team, car, state.rules, 'disclosed');
       const ctx = { driverTyre: d.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge };
       const sprintLaps = Math.max(3, Math.round(track.laps * state.rules.sprintLapsFactor));
       const factor = degFactor(track, ctx);

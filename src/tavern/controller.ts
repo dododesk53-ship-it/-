@@ -250,7 +250,7 @@ export class F1Controller {
         next: next?.label ?? null,
       },
       cars: team.cars.map(c => {
-        const r = carRatings(team, c, s.rules);
+        const r = carRatings(team, c, s.rules, 'disclosed');
         return {
           slot: c.slot,
           driver: c.driverId ? s.drivers[c.driverId]?.short ?? c.driverId : '—',

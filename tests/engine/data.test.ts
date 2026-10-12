@@ -80,4 +80,41 @@ describe('数据解析（世界书 YAML）', () => {
     expect(z.attrs.pace).toBe(100);
     expect(res.issues.some(i => i.message.includes('不是有效数字'))).toBe(true);
   });
+
+  it('规则里结构错误或数值非法时阻止开局并恢复默认值', () => {
+    const cases: Array<[string, unknown, (r: ReturnType<typeof normalizeDatabase>) => void]> = [
+      ['dryCompounds: []', { dryCompounds: [] }, r => expect(r.db!.rules.dryCompounds.length).toBeGreaterThan(0)],
+      ['负的研发花费', { parts: { floor: { baseCost: -10 } } }, r => expect(r.db!.rules.parts.floor.baseCost).toBe(3)],
+      ['NaN 预算帽', { costCap: Number.NaN }, r => expect(r.db!.rules.costCap).toBe(135)],
+      ['文本当数字', { costCap: 'abc' }, r => expect(r.db!.rules.costCap).toBe(135)],
+      ['parts 不是对象', { parts: [1, 2] }, () => {}],
+      ['facilities 条目类型错误', { facilities: { cfd: 5 } }, r => expect(r.db!.rules.facilities.cfd.maxLevel).toBe(5)],
+      ['tyres 条目缺 pace', { tyres: { soft: { pace: 'fast' } } }, r => expect(typeof r.db!.rules.tyres.soft.pace).toBe('number')],
+      ['零件权重为负', { parts: { floor: { weights: { downforce: -1 } } } }, r => expect(r.db!.rules.parts.floor.weights.downforce).toBe(0.4)],
+      ['设施升级表长度不足', { facilities: { cfd: { upgradeCost: [1] } } }, () => {}],
+    ];
+    for (const [name, rules, check] of cases) {
+      const res = normalizeDatabase([...placeholderSources(), { name, data: { rules } }]);
+      expect(res.canStart, name).toBe(false);
+      expect(res.issues.some(i => i.level === 'error' && i.path.startsWith('rules')), name).toBe(true);
+      check(res);
+    }
+  });
+
+  it('用 null 删除必填规则字段时恢复默认值并警告', () => {
+    const res = normalizeDatabase([...placeholderSources(), { name: '删除', data: { rules: { dryCompounds: null } } }]);
+    expect(res.canStart).toBe(true);
+    expect(res.db!.rules.dryCompounds).toEqual(['soft', 'medium', 'hard']);
+    expect(res.issues.some(i => i.level === 'warning' && i.path === 'rules.dryCompounds')).toBe(true);
+  });
+
+  it('允许为负的规则字段（轮胎速度、可靠性变化）不会被误报', () => {
+    const res = normalizeDatabase([
+      ...placeholderSources(),
+      { name: '合法', data: { rules: { tyres: { medium: { pace: -0.1 } }, ambition: { aggressive: { relDelta: -8 } }, parts: { gearbox: null } } } },
+    ]);
+    expect(res.issues.filter(i => i.level === 'error')).toEqual([]);
+    expect(res.db!.rules.tyres.medium.pace).toBe(-0.1);
+    expect(res.db!.rules.parts.gearbox).toBeUndefined();
+  });
 });

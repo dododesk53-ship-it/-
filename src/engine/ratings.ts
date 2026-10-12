@@ -76,7 +76,29 @@ export function bestSpec(team: TeamState, partType: string): PartSpec | undefine
   return best;
 }
 
-export function carRatings(team: TeamState, car: CarState, rules: Rules): CarRatings {
+/**
+ * 玩家（和 AI 叙事者）能看到的零件性能：未验证的新件按交付时的预估区间中值计算，
+ * 不暴露研发时抽到的真实收益。
+ */
+export function disclosedPerf(spec: PartSpec): number {
+  if (spec.verified || !spec.expected) return spec.perf;
+  return round1((spec.expected[0] + spec.expected[1]) / 2);
+}
+
+/**
+ * 赛车属性。
+ * - `true`：用真实性能，只供模拟（练习、排位、正赛）使用。
+ * - `disclosed`：未验证的新件用预估值，供界面、状态条、提示词和车手的主观感受使用。
+ */
+export type RatingBasis = 'true' | 'disclosed';
+
+/** 车队某类零件中「玩家已知」的最好性能（未验证的新件按预估值），用于研发预览与收益计算 */
+export function bestDisclosedPerf(team: TeamState, partType: string): number | undefined {
+  const specs = team.parts[partType]?.specs ?? [];
+  return specs.length ? Math.max(...specs.map(disclosedPerf)) : undefined;
+}
+
+export function carRatings(team: TeamState, car: CarState, rules: Rules, basis: RatingBasis = 'true'): CarRatings {
   const acc: Record<CarAttr, { s: number; w: number }> = {
     downforce: { s: 0, w: 0 },
     efficiency: { s: 0, w: 0 },
@@ -89,7 +111,7 @@ export function carRatings(team: TeamState, car: CarState, rules: Rules): CarRat
   let relMin = 100;
   for (const [pt, def] of Object.entries(rules.parts)) {
     const spec = fittedSpec(team, car, pt);
-    const perf = spec?.perf ?? 50;
+    const perf = spec ? (basis === 'disclosed' ? disclosedPerf(spec) : spec.perf) : 50;
     const rel = spec?.rel ?? 70;
     for (const attr of CAR_ATTRS) {
       const w = def.weights[attr] ?? 0;
@@ -149,11 +171,15 @@ export function activeEntries(state: GameState): Array<{ driver: DriverState; te
 }
 
 /** 按赛道性能给所有车队排名（取车队里最好的那台车） */
-export function teamPaceRanking(state: GameState, track: TrackDef | null): Array<{ teamId: string; score: number }> {
+export function teamPaceRanking(
+  state: GameState,
+  track: TrackDef | null,
+  basis: RatingBasis = 'true',
+): Array<{ teamId: string; score: number }> {
   const list = state.teamOrder.map(tid => {
     const team = state.teams[tid];
     const scores = team.cars.map(c => {
-      const r = carRatings(team, c, state.rules);
+      const r = carRatings(team, c, state.rules, basis);
       return track ? trackScore(r, track) : r.overall;
     });
     return { teamId: tid, score: round1(scores.length ? Math.max(...scores) : 0) };

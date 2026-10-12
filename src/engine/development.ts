@@ -11,7 +11,7 @@
 import { AMBITIONS, LABELS, TRACK_DEMANDS } from './defaults';
 import { affordError, capRemaining, charge, income, payWeeklySalaries } from './finance';
 import { addNews, addNarration, driverName } from './log';
-import { bestSpec, carRatings, driverOverall, findSpec } from './ratings';
+import { bestDisclosedPerf, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec } from './ratings';
 import type { Rng } from './rng';
 import type {
   Ambition,
@@ -133,7 +133,8 @@ export function previewProject(
       units: 0,
     };
   }
-  const best = bestSpec(team, partType)?.perf ?? 50;
+  // 用玩家已知的性能做基准：未验证新件的真实收益不能从研发预览里推算出来
+  const best = bestDisclosedPerf(team, partType) ?? 50;
   const expected = amb.gain * headroom(rules, best) * staffFactor(team, def.aero) * facilityGainFactor(team, def.aero);
   const spread = amb.spread * facilitySpreadFactor(team, def.aero);
   const cost = round2(def.baseCost * amb.costMul * (rush ? 1.5 : 1));
@@ -430,7 +431,8 @@ export function autoFit(state: GameState, team: TeamState, partType: PartType, s
   });
   for (const car of cars) {
     const cur = findSpec(team, partType, car.fitted[partType]);
-    if (cur && cur.perf >= spec.perf) continue;
+    // 按玩家已知的性能比较（未验证的新件用预估值），避免自动分配泄露真实收益
+    if (cur && disclosedPerf(cur) >= disclosedPerf(spec)) continue;
     const res = fitPart(state, team.id, car.slot, partType, specId);
     if (res.ok && car.driverId) fittedTo.push(car.driverId);
   }
@@ -448,7 +450,8 @@ function completeProject(state: GameState, team: TeamState, p: Project, rng: Rng
       const parts = team.parts[pt];
       const best = bestSpec(team, pt);
       const version = Math.max(...parts.specs.map(s => s.version)) + 1;
-      const base = best?.perf ?? 50;
+      // 与研发预览使用同一个基准（玩家已知的最好性能），预估区间才不会泄露旧件的真实性能
+      const base = bestDisclosedPerf(team, pt) ?? 50;
       const spec: PartSpec = {
         id: `${pt}-${version}`,
         type: pt,
@@ -618,6 +621,6 @@ export function refreshAeroAllowance(state: GameState): void {
 /** 两台车之间的性能差（overall），用于界面提示 */
 export function allocationGap(state: GameState, team: TeamState): number {
   if (team.cars.length < 2) return 0;
-  const scores = team.cars.map(c => carRatings(team, c, state.rules).overall);
+  const scores = team.cars.map(c => carRatings(team, c, state.rules, 'disclosed').overall);
   return round1(Math.max(...scores) - Math.min(...scores));
 }

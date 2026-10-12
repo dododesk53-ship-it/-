@@ -339,9 +339,22 @@ function lastTimeOf(sessions: QualiSession[], id: string): number | null {
   return null;
 }
 
-/** 按罚退格数后移（稳定排序） */
+/**
+ * 按罚退格数后移：先取出被罚的车手，其余车手依次前移补位，
+ * 再把被罚车手放到「原位置 + 罚退格数」。目标位置相同时，排位成绩好的排在前面。
+ */
 export function applyPenalties(order: string[], penalties: Record<string, number>): string[] {
-  const keyed = order.map((id, i) => ({ id, key: i + (penalties[id] ?? 0) + (penalties[id] ? 0.5 : 0) }));
-  keyed.sort((a, b) => a.key - b.key);
-  return keyed.map(k => k.id);
+  const penalized = order
+    .map((id, index) => ({ id, index, target: index + Math.max(0, Math.round(penalties[id] ?? 0)) }))
+    .filter(e => e.target > e.index)
+    .sort((a, b) => a.target - b.target || a.index - b.index);
+  const moved = new Set(penalized.map(e => e.id));
+  const grid = order.filter(id => !moved.has(id));
+  let prev = -1;
+  for (const e of penalized) {
+    const at = Math.min(Math.max(e.target, prev + 1), grid.length);
+    grid.splice(at, 0, e.id);
+    prev = at;
+  }
+  return grid;
 }

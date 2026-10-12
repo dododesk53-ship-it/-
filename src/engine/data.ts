@@ -22,6 +22,7 @@ import type {
   TeamDef,
   TrackDef,
   TrackDemand,
+  TyreDef,
 } from './types';
 import { clamp, deepClone, hashString, isPlainObject, round1 } from './util';
 
@@ -153,42 +154,158 @@ const GENERIC_PART: PartDef = {
   crashDamage: 0.1,
 };
 
+const GENERIC_TYRE: TyreDef = {
+  name: '轮胎',
+  short: '?',
+  pace: 0,
+  deg: 0.06,
+  cliff: 27,
+  wet: false,
+  color: '#888888',
+};
+
+/** 允许为负数的规则字段（路径里的通配符 * 代表任意零件 / 配方 / 方案） */
+const SIGNED_RULE_PATHS = new Set(['tyres.*.pace', 'ambition.*.relDelta', 'seasonYear']);
+/** 取值必须在 [min, max] 内的规则字段 */
+const RULE_RANGES: Record<string, { min?: number; max?: number; int?: boolean }> = {
+  carryOver: { max: 1 },
+  'parts.*.crashDamage': { max: 1 },
+  'ambition.*.units': { min: 1, int: true },
+  'facilities.*.maxLevel': { min: 1, int: true },
+  'aiLimits.maxCommands': { int: true },
+  mandatoryCompounds: { min: 1, int: true },
+  sprintLapsFactor: { max: 1 },
+};
+
+/**
+ * 按模板逐字段检查合并后的规则：类型不对、不是有限数、超出范围时报错并恢复成模板值。
+ * 规则来自玩家可编辑的世界书，所以这里不能信任任何结构。
+ */
+function sanitizeRuleValue(ctx: Ctx, value: unknown, template: unknown, path: string, pattern: string): unknown {
+  if (value === undefined) {
+    ctx.warn(`rules.${path}`, '字段被删除或缺失，已使用默认值');
+    return deepClone(template);
+  }
+  if (typeof template === 'number') {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      ctx.err(`rules.${path}`, `「${String(value)}」不是有效数字`);
+      return template;
+    }
+    // ambition / facilities 的键是固定的，但规则表里统一用通配符书写
+    const wild = pattern.replace(/^(ambition|facilities)\.[^.]+\./, '$1.*.');
+    const range = RULE_RANGES[wild] ?? {};
+    const min = range.min ?? (SIGNED_RULE_PATHS.has(wild) ? -Infinity : 0);
+    if (value < min || (range.max !== undefined && value > range.max) || (range.int && !Number.isInteger(value))) {
+      const bounds = `${min === -Infinity ? '' : `≥ ${min}`}${range.max !== undefined ? ` 且 ≤ ${range.max}` : ''}${range.int ? '（整数）' : ''}`;
+      ctx.err(`rules.${path}`, `数值 ${value} 不合法，应为 ${bounds}`);
+      return template;
+    }
+    return value;
+  }
+  if (typeof template === 'boolean' || typeof template === 'string') {
+    if (typeof value !== typeof template) {
+      ctx.err(`rules.${path}`, `应为${typeof template === 'boolean' ? '是/否' : '文本'}`);
+      return template;
+    }
+    return value;
+  }
+  if (Array.isArray(template)) {
+    const wantString = typeof template[0] === 'string';
+    const ok =
+      Array.isArray(value) &&
+      value.every(v => (wantString ? typeof v === 'string' : typeof v === 'number' && Number.isFinite(v) && v >= 0));
+    if (!ok) {
+      ctx.err(`rules.${path}`, wantString ? '应为文本列表' : '应为非负数字列表');
+      return deepClone(template);
+    }
+    return value;
+  }
+  if (isPlainObject(template)) {
+    if (!isPlainObject(value)) {
+      ctx.err(path ? `rules.${path}` : 'rules', '应为键值对象');
+      return deepClone(template);
+    }
+    const out: Record<string, unknown> = { ...value };
+    for (const [k, t] of Object.entries(template)) {
+      const sub = (prefix: string) => (prefix ? `${prefix}.${k}` : k);
+      out[k] = sanitizeRuleValue(ctx, value[k], t, sub(path), sub(pattern));
+    }
+    return out;
+  }
+  return value;
+}
+
+/** 检查一个「名字由用户决定」的映射（零件、轮胎），每一项按同一个模板检查 */
+function sanitizeRuleMap<T>(ctx: Ctx, value: unknown, generic: T, key: 'parts' | 'tyres'): Record<string, T> {
+  if (!isPlainObject(value)) {
+    ctx.err(`rules.${key}`, '应为键值对象');
+    return {};
+  }
+  const out: Record<string, T> = {};
+  for (const [name, entry] of Object.entries(value)) {
+    if (!isPlainObject(entry)) {
+      ctx.err(`rules.${key}.${name}`, '应为键值对象');
+      continue;
+    }
+    // 默认规则里有的条目，非法值恢复成该条目的默认值；新增条目恢复成通用默认值
+    const builtin = (DEFAULT_RULES[key] as Record<string, unknown>)[name];
+    const template = builtin ? deepMerge(generic, builtin) : generic;
+    out[name] = sanitizeRuleValue(ctx, deepMerge(template, entry), template, `${key}.${name}`, `${key}.*`) as T;
+  }
+  return out;
+}
+
 function normalizeRules(ctx: Ctx, patches: Array<{ source: string; data: unknown }>): Rules {
-  let rules: Rules = deepClone(DEFAULT_RULES);
+  let merged: Record<string, unknown> = deepClone(DEFAULT_RULES) as unknown as Record<string, unknown>;
   for (const p of patches) {
     ctx.source = p.source;
     if (!isPlainObject(p.data)) {
       ctx.err('rules', '规则必须是键值对象');
       continue;
     }
-    rules = deepMerge(rules, p.data);
+    merged = deepMerge(merged, p.data);
   }
   ctx.source = '规则（合并后）';
-  // 零件定义补全
-  const parts: Record<string, PartDef> = {};
-  for (const [key, def] of Object.entries(asObject(rules.parts))) {
-    const d = deepMerge(GENERIC_PART, def);
-    if (!isPlainObject(d.weights)) d.weights = {};
-    parts[key] = d;
+  const { parts: rawParts, tyres: rawTyres, ...rest } = merged;
+  const { parts: _p, tyres: _t, ...restTemplate } = DEFAULT_RULES;
+  const rules = {
+    ...(sanitizeRuleValue(ctx, rest, restTemplate, '', '') as Omit<Rules, 'parts' | 'tyres'>),
+    parts: sanitizeRuleMap(ctx, rawParts, GENERIC_PART, 'parts'),
+    tyres: sanitizeRuleMap(ctx, rawTyres, GENERIC_TYRE, 'tyres'),
+  } as Rules;
+
+  for (const [key, def] of Object.entries(rules.parts)) {
+    for (const [attr, w] of Object.entries(def.weights)) {
+      if (typeof w !== 'number' || !Number.isFinite(w) || w < 0) {
+        ctx.err(`rules.parts.${key}.weights.${attr}`, '权重应为非负数字');
+        delete (def.weights as Record<string, unknown>)[attr];
+      }
+    }
   }
-  if (Object.keys(parts).length === 0) {
+  if (Object.keys(rules.parts).length === 0) {
     ctx.err('rules.parts', '至少需要定义一种零件');
   }
-  rules.parts = parts;
   // 轮胎
+  if (rules.dryCompounds.length === 0) {
+    ctx.err('rules.dryCompounds', '至少需要一种干地配方');
+    rules.dryCompounds = [...DEFAULT_RULES.dryCompounds];
+  }
   for (const c of rules.dryCompounds) {
     if (!rules.tyres[c]) ctx.err('rules.dryCompounds', `干地配方「${c}」未在 rules.tyres 中定义`);
   }
   if (!rules.tyres[rules.wetCompound]) ctx.err('rules.wetCompound', `雨地配方「${rules.wetCompound}」未定义`);
-  if (!Array.isArray(rules.pointsRace) || rules.pointsRace.some(v => typeof v !== 'number')) {
-    ctx.err('rules.pointsRace', '积分表必须是数字数组');
-    rules.pointsRace = [...DEFAULT_RULES.pointsRace];
+  if (rules.aeroAllowanceByPosition.length === 0) {
+    ctx.err('rules.aeroAllowanceByPosition', '风洞时长倍率表不能为空');
+    rules.aeroAllowanceByPosition = [...DEFAULT_RULES.aeroAllowanceByPosition];
   }
-  if (!Array.isArray(rules.pointsSprint) || rules.pointsSprint.some(v => typeof v !== 'number')) {
-    ctx.err('rules.pointsSprint', '冲刺赛积分表必须是数字数组');
-    rules.pointsSprint = [...DEFAULT_RULES.pointsSprint];
+  for (const [key, f] of Object.entries(rules.facilities)) {
+    for (const list of ['upgradeCost', 'upgradeWeeks'] as const) {
+      if (f[list].length < f.maxLevel - 1) {
+        ctx.err(`rules.facilities.${key}.${list}`, `最高 ${f.maxLevel} 级需要 ${f.maxLevel - 1} 个数值（当前 ${f[list].length} 个）`);
+      }
+    }
   }
-  rules.mandatoryCompounds = clamp(Math.round(rules.mandatoryCompounds), 1, rules.dryCompounds.length || 1);
+  rules.mandatoryCompounds = Math.min(rules.mandatoryCompounds, rules.dryCompounds.length);
   return rules;
 }
 
