@@ -1,5 +1,12 @@
 # ═══════════════ [F1M数据] 车手 ═══════════════
-# ⚠ 除法拉利车手（hamilton / leclerc / giovinazzi，2026 真实资料）外，其余都是「虚构的占位测试数据」。
+# 2026 赛季真实阵容：11 支车队 22 名正式车手，另有部分车队的替补车手。
+# 能力值依据 2025 赛季成绩与职业生涯表现估算（2025 车手榜前列：诺里斯 423、维斯塔潘 421、
+# 皮亚斯特里 410、拉塞尔 319、勒克莱尔 242、汉密尔顿 156、安东内利 150）。
+# 年龄按 2026 赛季开始时计算；年薪与合同到期年份是根据公开报道的估计值。
+#
+# 能力值对圈速的影响：正赛能力 = 速度×0.4 + 缠斗×0.25 + 稳定×0.2 + 轮胎×0.15（雨天雨战占一半），
+#   排位能力 = 速度×0.75 + 稳定×0.25；每差 1 点约差 0.035 秒/圈（规则中的 secPerDriverPoint）。
+#   稳定性还决定圈速波动和失误率；技术反馈影响练习赛调校效率与排位加成。
 #
 # 字段说明：
 #   id            唯一标识（AI 的数值指令用它指代车手，建议简短）
@@ -18,194 +25,128 @@
 #   salary        年薪（M$）
 #   contractEnd   合同到期年份
 #   traits        性格标签（给 AI 叙事参考）
-#   description   简介
 drivers:
-  - id: a1
-    name: 测试车手A1
-    short: TA1
-    number: 1
-    nationality: 测试国
-    age: 27
-    team: team_a
+  # ── 梅赛德斯（2026） ──
+  - id: russell
+    name: 乔治·拉塞尔
+    short: RUS
+    number: 63
+    nationality: 英国
+    age: 28
+    team: mercedes
     role: race
-    attrs: { pace: 90, racecraft: 88, consistency: 87, tyre: 84, wet: 86, feedback: 82 }
-    potential: 92
-    morale: 72
+    attrs: { pace: 93, racecraft: 88, consistency: 90, tyre: 88, wet: 89, feedback: 90 }
+    potential: 93
+    morale: 76
     ego: 70
-    salary: 12
-    contractEnd: 2027
-    traits: [冷静, 擅长排位, 好胜]
-    description: 占位数据：车队的头号车手，速度顶尖但对待遇非常敏感。
+    salary: 30
+    contractEnd: 2026
+    traits: [排位强, 技术型, 领袖气质]
+    description: 2025 年车手榜第 4（319 分），赢下加拿大站和新加坡站。合同只续到 2026 年，想证明自己配得上头号车手。
 
-  - id: a2
-    name: 测试车手A2
-    short: TA2
-    number: 2
-    nationality: 测试国
-    age: 22
-    team: team_a
+  - id: antonelli
+    name: 基米·安东内利
+    short: ANT
+    number: 12
+    nationality: 意大利
+    age: 19
+    team: mercedes
     role: race
-    attrs: { pace: 84, racecraft: 80, consistency: 76, tyre: 78, wet: 74, feedback: 72 }
-    potential: 91
-    morale: 68
+    attrs: { pace: 90, racecraft: 84, consistency: 80, tyre: 82, wet: 85, feedback: 80 }
+    potential: 97
+    morale: 70
+    ego: 40
+    salary: 5
+    contractEnd: 2026
+    traits: [天才少年, 进步神速, 偶尔冒进]
+    description: 2025 年新秀赛季车手榜第 7（150 分），三次登上领奖台。车队最看好的未来之星，成长空间极大。
+
+  # ── 迈凯伦（2026） ──
+  - id: norris
+    name: 兰多·诺里斯
+    short: NOR
+    number: 1
+    nationality: 英国
+    age: 26
+    team: mclaren
+    role: race
+    attrs: { pace: 93, racecraft: 88, consistency: 87, tyre: 91, wet: 88, feedback: 89 }
+    potential: 95
+    morale: 84
+    ego: 60
+    salary: 35
+    contractEnd: 2027
+    traits: [卫冕世界冠军, 排位强, 自我要求高]
+    description: 2025 年世界冠军（423 分），以 2 分优势击败维斯塔潘。2026 年以 1 号车卫冕。
+
+  - id: piastri
+    name: 奥斯卡·皮亚斯特里
+    short: PIA
+    number: 81
+    nationality: 澳大利亚
+    age: 24
+    team: mclaren
+    role: race
+    attrs: { pace: 92, racecraft: 89, consistency: 89, tyre: 91, wet: 84, feedback: 87 }
+    potential: 95
+    morale: 66
+    ego: 55
+    salary: 25
+    contractEnd: 2028
+    traits: [冷静, 轮胎管理, 抗压]
+    description: 2025 年车手榜第 3（410 分），赛季中段长期领跑积分榜，最后几站被反超。
+
+  # ── 红牛（2026） ──
+  - id: verstappen
+    name: 马克斯·维斯塔潘
+    short: VER
+    number: 3
+    nationality: 荷兰
+    age: 28
+    team: red_bull
+    role: race
+    attrs: { pace: 96, racecraft: 96, consistency: 94, tyre: 92, wet: 97, feedback: 93 }
+    potential: 97
+    morale: 72
+    ego: 85
+    salary: 60
+    contractEnd: 2028
+    traits: [四届世界冠军, 雨战大师, 极度好胜]
+    description: 四届世界冠军（2021–2024）。2025 年车手榜第 2（421 分），只差冠军 2 分。2026 年改用 3 号车。
+
+  - id: hadjar
+    name: 伊萨克·哈贾尔
+    short: HAD
+    number: 6
+    nationality: 法国
+    age: 21
+    team: red_bull
+    role: race
+    attrs: { pace: 87, racecraft: 83, consistency: 82, tyre: 82, wet: 82, feedback: 80 }
+    potential: 92
+    morale: 74
     ego: 55
     salary: 3
-    contractEnd: 2026
-    traits: [年轻, 进步神速, 偶尔冒进]
-    description: 占位数据：潜力巨大的年轻车手，渴望证明自己。
-
-  - id: a3
-    name: 测试替补A3
-    short: TA3
-    number: 30
-    nationality: 测试国
-    age: 24
-    team: team_a
-    role: reserve
-    attrs: { pace: 78, racecraft: 74, consistency: 75, tyre: 74, wet: 72, feedback: 76 }
-    potential: 84
-    morale: 60
-    ego: 35
-    salary: 0.8
-    contractEnd: 2026
-    traits: [勤奋, 模拟器专家]
-    description: 占位数据：替补车手，主要负责模拟器工作。
-
-  - id: b1
-    name: 测试车手B1
-    short: TB1
-    number: 11
-    nationality: 测试国
-    age: 33
-    team: team_b
-    role: race
-    attrs: { pace: 86, racecraft: 91, consistency: 90, tyre: 89, wet: 90, feedback: 88 }
-    potential: 88
-    morale: 70
-    ego: 60
-    salary: 10
-    contractEnd: 2026
-    traits: [老将, 轮胎管理大师, 雨战高手]
-    description: 占位数据：经验丰富的老将。
-
-  - id: b2
-    name: 测试车手B2
-    short: TB2
-    number: 12
-    nationality: 测试国
-    age: 25
-    team: team_b
-    role: race
-    attrs: { pace: 85, racecraft: 83, consistency: 80, tyre: 80, wet: 79, feedback: 78 }
-    potential: 89
-    morale: 66
-    ego: 78
-    salary: 5
     contractEnd: 2027
-    traits: [火爆, 进攻型]
-    description: 占位数据：脾气火爆的进攻型车手。
+    traits: [速度快, 情绪化, 进步神速]
+    description: 2025 年在小红牛的新秀赛季于荷兰站登上领奖台，2026 年升入红牛，成为维斯塔潘的队友。
 
-  - id: c1
-    name: 测试车手C1
-    short: TC1
-    number: 21
-    nationality: 测试国
-    age: 29
-    team: team_c
-    role: race
-    attrs: { pace: 82, racecraft: 83, consistency: 84, tyre: 82, wet: 80, feedback: 81 }
-    potential: 84
-    morale: 65
-    ego: 50
-    salary: 4
-    contractEnd: 2027
-    traits: [稳健, 团队型]
-    description: 占位数据：稳定可靠的中游车手。
-
-  - id: c2
-    name: 测试车手C2
-    short: TC2
+  - id: tsunoda
+    name: 角田裕毅
+    short: TSU
     number: 22
-    nationality: 测试国
-    age: 20
-    team: team_c
-    role: race
-    attrs: { pace: 80, racecraft: 74, consistency: 70, tyre: 72, wet: 70, feedback: 68 }
-    potential: 90
-    morale: 70
-    ego: 45
-    salary: 1
-    contractEnd: 2027
-    traits: [新秀, 天赋型]
-    description: 占位数据：新秀车手。
-
-  - id: d1
-    name: 测试车手D1
-    short: TD1
-    number: 31
-    nationality: 测试国
-    age: 31
-    team: team_d
-    role: race
-    attrs: { pace: 79, racecraft: 81, consistency: 82, tyre: 80, wet: 78, feedback: 80 }
-    potential: 80
-    morale: 60
-    ego: 40
+    nationality: 日本
+    age: 25
+    team: red_bull
+    role: reserve
+    attrs: { pace: 84, racecraft: 80, consistency: 76, tyre: 79, wet: 80, feedback: 80 }
+    potential: 85
+    morale: 50
+    ego: 60
     salary: 2
     contractEnd: 2026
-    traits: [老练, 低调]
-    description: 占位数据：尾部车队的领军人物。
-
-  - id: d2
-    name: 测试车手D2
-    short: TD2
-    number: 32
-    nationality: 测试国
-    age: 26
-    team: team_d
-    role: race
-    attrs: { pace: 76, racecraft: 74, consistency: 74, tyre: 75, wet: 72, feedback: 70 }
-    potential: 80
-    morale: 62
-    ego: 50
-    salary: 1
-    contractEnd: 2026
-    traits: [付费车手]
-    description: 占位数据：带资车手。
-
-  - id: e1
-    name: 测试车手E1
-    short: TE1
-    number: 14
-    nationality: 测试国
-    age: 30
-    team: team_e
-    role: race
-    attrs: { pace: 87, racecraft: 86, consistency: 85, tyre: 84, wet: 83, feedback: 85 }
-    potential: 89
-    morale: 70
-    ego: 72
-    salary: 9
-    contractEnd: 2027
-    traits: [全能, 领袖型]
-    description: 占位数据：车队核心，速度和技术反馈都很出色。
-
-  - id: e2
-    name: 测试车手E2
-    short: TE2
-    number: 15
-    nationality: 测试国
-    age: 23
-    team: team_e
-    role: race
-    attrs: { pace: 83, racecraft: 79, consistency: 77, tyre: 78, wet: 76, feedback: 74 }
-    potential: 89
-    morale: 68
-    ego: 50
-    salary: 2
-    contractEnd: 2026
-    traits: [年轻, 稳步成长]
-    description: 占位数据：车队培养的年轻车手。
+    traits: [速度快, 情绪化, 本田出身]
+    description: 2025 年第三站起从小红牛升入红牛，2026 年改任红牛与小红牛共同的替补车手。
 
   # ── 法拉利（2026 真实阵容）──
   - id: hamilton
@@ -264,172 +205,281 @@ drivers:
     traits: [意大利人, 模拟器主力, 耐力赛经验]
     description: 法拉利替补车手，同时参加法拉利的 WEC 耐力赛项目，大部分时间在模拟器里帮正式车手准备周末。
 
-  - id: g1
-    name: 测试车手G1
-    short: TG1
-    number: 61
-    nationality: 测试国
-    age: 27
-    team: team_g
-    role: race
-    attrs: { pace: 82, racecraft: 81, consistency: 83, tyre: 82, wet: 79, feedback: 80 }
-    potential: 85
-    morale: 65
-    ego: 55
-    salary: 3.5
-    contractEnd: 2027
-    traits: [稳定, 善于守位]
-    description: 占位数据：稳定拿分的中游车手。
-
-  - id: g2
-    name: 测试车手G2
-    short: TG2
-    number: 62
-    nationality: 测试国
-    age: 21
-    team: team_g
-    role: race
-    attrs: { pace: 80, racecraft: 75, consistency: 72, tyre: 73, wet: 74, feedback: 70 }
-    potential: 90
-    morale: 70
-    ego: 40
-    salary: 1
-    contractEnd: 2027
-    traits: [新秀, 雨战天赋]
-    description: 占位数据：雨天表现亮眼的新秀。
-
-  - id: h1
-    name: 测试车手H1
-    short: TH1
-    number: 71
-    nationality: 测试国
+  # ── 威廉姆斯（2026） ──
+  - id: albon
+    name: 亚历山大·阿尔本
+    short: ALB
+    number: 23
+    nationality: 泰国
     age: 30
-    team: team_h
+    team: williams
     role: race
-    attrs: { pace: 81, racecraft: 82, consistency: 82, tyre: 80, wet: 81, feedback: 80 }
-    potential: 83
-    morale: 62
+    attrs: { pace: 86, racecraft: 86, consistency: 86, tyre: 88, wet: 82, feedback: 86 }
+    potential: 87
+    morale: 72
     ego: 50
-    salary: 3
-    contractEnd: 2026
-    traits: [老练, 团队型]
-    description: 占位数据：服务过多支车队的老练车手。
-
-  - id: h2
-    name: 测试车手H2
-    short: TH2
-    number: 72
-    nationality: 测试国
-    age: 24
-    team: team_h
-    role: race
-    attrs: { pace: 80, racecraft: 77, consistency: 75, tyre: 76, wet: 73, feedback: 72 }
-    potential: 86
-    morale: 66
-    ego: 65
-    salary: 1.5
+    salary: 10
     contractEnd: 2027
-    traits: [冒进, 排位快]
-    description: 占位数据：排位赛单圈速度不错。
+    traits: [稳定, 轮胎管理, 队内核心]
+    description: 威廉姆斯的核心车手，2025 年多次把赛车带进积分区。
 
-  - id: i1
-    name: 测试车手I1
-    short: TI1
-    number: 81
-    nationality: 测试国
-    age: 34
-    team: team_i
-    role: race
-    attrs: { pace: 79, racecraft: 84, consistency: 86, tyre: 85, wet: 83, feedback: 84 }
-    potential: 80
-    morale: 60
-    ego: 45
-    salary: 2.5
-    contractEnd: 2026
-    traits: [老将, 轮胎管理]
-    description: 占位数据：即将退役的老将。
-
-  - id: i2
-    name: 测试车手I2
-    short: TI2
-    number: 82
-    nationality: 测试国
-    age: 22
-    team: team_i
-    role: race
-    attrs: { pace: 79, racecraft: 74, consistency: 72, tyre: 72, wet: 71, feedback: 70 }
-    potential: 88
-    morale: 68
-    ego: 50
-    salary: 1
-    contractEnd: 2027
-    traits: [年轻, 进步快]
-    description: 占位数据：刚升入 F1 的年轻车手。
-
-  - id: j1
-    name: 测试车手J1
-    short: TJ1
-    number: 91
-    nationality: 测试国
-    age: 29
-    team: team_j
-    role: race
-    attrs: { pace: 79, racecraft: 79, consistency: 80, tyre: 79, wet: 77, feedback: 76 }
-    potential: 81
-    morale: 61
-    ego: 55
-    salary: 1.8
-    contractEnd: 2026
-    traits: [低调, 可靠]
-    description: 占位数据：车队的稳定输出点。
-
-  - id: j2
-    name: 测试车手J2
-    short: TJ2
-    number: 92
-    nationality: 测试国
-    age: 23
-    team: team_j
-    role: race
-    attrs: { pace: 77, racecraft: 73, consistency: 71, tyre: 72, wet: 70, feedback: 69 }
-    potential: 84
-    morale: 63
-    ego: 60
-    salary: 0.8
-    contractEnd: 2026
-    traits: [付费车手, 急于证明]
-    description: 占位数据：带资加入的车手。
-
-  - id: k1
-    name: 测试车手K1
-    short: TK1
-    number: 17
-    nationality: 测试国
+  - id: sainz
+    name: 卡洛斯·塞恩斯
+    short: SAI
+    number: 55
+    nationality: 西班牙
     age: 31
-    team: team_k
+    team: williams
     role: race
-    attrs: { pace: 81, racecraft: 82, consistency: 83, tyre: 81, wet: 80, feedback: 83 }
-    potential: 82
-    morale: 68
-    ego: 55
-    salary: 3
-    contractEnd: 2027
-    traits: [经验丰富, 技术型]
-    description: 占位数据：新车队请来的经验型车手，负责带队开发。
+    attrs: { pace: 87, racecraft: 88, consistency: 88, tyre: 87, wet: 85, feedback: 91 }
+    potential: 88
+    morale: 72
+    ego: 60
+    salary: 12
+    contractEnd: 2026
+    traits: [技术反馈强, 战术聪明, 经验丰富]
+    description: 前法拉利车手，2025 年加盟威廉姆斯，在阿塞拜疆站为车队登上领奖台。
 
-  - id: k2
-    name: 测试车手K2
-    short: TK2
-    number: 18
-    nationality: 测试国
-    age: 27
-    team: team_k
+  # ── 小红牛（2026） ──
+  - id: lawson
+    name: 利亚姆·劳森
+    short: LAW
+    number: 30
+    nationality: 新西兰
+    age: 24
+    team: racing_bulls
     role: race
-    attrs: { pace: 79, racecraft: 78, consistency: 77, tyre: 77, wet: 75, feedback: 75 }
-    potential: 83
-    morale: 67
+    attrs: { pace: 82, racecraft: 83, consistency: 78, tyre: 80, wet: 80, feedback: 77 }
+    potential: 87
+    morale: 64
+    ego: 60
+    salary: 2
+    contractEnd: 2026
+    traits: [硬朗, 缠斗强, 偶尔失误]
+    description: 2025 年开局在红牛只跑了两站就被换回小红牛，之后逐渐找回状态。
+
+  - id: lindblad
+    name: 阿尔维德·林德布拉德
+    short: LIN
+    number: 41
+    nationality: 英国
+    age: 18
+    team: racing_bulls
+    role: race
+    attrs: { pace: 82, racecraft: 79, consistency: 75, tyre: 76, wet: 78, feedback: 73 }
+    potential: 93
+    morale: 72
+    ego: 45
+    salary: 1
+    contractEnd: 2026
+    traits: [新秀, 速度快, 经验不足]
+    description: 红牛青训的新星，2026 年以 18 岁的年龄完成 F1 首秀。
+
+  # ── 阿斯顿·马丁（2026） ──
+  - id: alonso
+    name: 费尔南多·阿隆索
+    short: ALO
+    number: 14
+    nationality: 西班牙
+    age: 44
+    team: aston_martin
+    role: race
+    attrs: { pace: 86, racecraft: 93, consistency: 89, tyre: 90, wet: 91, feedback: 93 }
+    potential: 86
+    morale: 55
+    ego: 75
+    salary: 20
+    contractEnd: 2026
+    traits: [两届世界冠军, 缠斗大师, 老将]
+    description: 两届世界冠军（2005、2006），全场最年长的车手。期待纽维和本田给他一台能争胜的赛车。
+
+  - id: stroll
+    name: 兰斯·斯特罗尔
+    short: STR
+    number: 18
+    nationality: 加拿大
+    age: 27
+    team: aston_martin
+    role: race
+    attrs: { pace: 79, racecraft: 79, consistency: 75, tyre: 80, wet: 83, feedback: 77 }
+    potential: 80
+    morale: 58
+    ego: 55
+    salary: 10
+    contractEnd: 2027
+    traits: [雨战不错, 状态起伏, 老板之子]
+    description: 车队老板劳伦斯·斯特罗尔之子，位置稳固但速度起伏较大。
+
+  # ── 哈斯（2026） ──
+  - id: ocon
+    name: 埃斯特班·奥孔
+    short: OCO
+    number: 31
+    nationality: 法国
+    age: 29
+    team: haas
+    role: race
+    attrs: { pace: 83, racecraft: 85, consistency: 83, tyre: 84, wet: 85, feedback: 83 }
+    potential: 84
+    morale: 66
+    ego: 55
+    salary: 8
+    contractEnd: 2026
+    traits: [大奖赛冠军, 防守强, 稳定]
+    description: 2021 年匈牙利站冠军，2025 年加盟哈斯，是车队的经验担当。
+
+  - id: bearman
+    name: 奥利弗·贝尔曼
+    short: BEA
+    number: 87
+    nationality: 英国
+    age: 20
+    team: haas
+    role: race
+    attrs: { pace: 84, racecraft: 82, consistency: 78, tyre: 80, wet: 80, feedback: 77 }
+    potential: 92
+    morale: 72
     ego: 50
     salary: 2
-    contractEnd: 2027
-    traits: [务实, 团队型]
-    description: 占位数据：新车队的二号车手。
+    contractEnd: 2026
+    traits: [法拉利青训, 速度快, 进步神速]
+    description: 法拉利青训车手，2025 年在哈斯完成首个完整赛季，表现稳步提升。
+
+  - id: doohan
+    name: 杰克·杜汉
+    short: DOO
+    number: 7
+    nationality: 澳大利亚
+    age: 23
+    team: haas
+    role: reserve
+    attrs: { pace: 79, racecraft: 77, consistency: 73, tyre: 76, wet: 76, feedback: 75 }
+    potential: 84
+    morale: 52
+    ego: 45
+    salary: 0.8
+    contractEnd: 2026
+    traits: [速度尚可, 急于证明自己]
+    description: 2025 年为阿尔派出赛六站后被替换，2026 年担任哈斯替补车手。
+
+  # ── 奥迪（2026） ──
+  - id: hulkenberg
+    name: 尼科·霍肯伯格
+    short: HUL
+    number: 27
+    nationality: 德国
+    age: 38
+    team: audi
+    role: race
+    attrs: { pace: 84, racecraft: 85, consistency: 87, tyre: 86, wet: 84, feedback: 88 }
+    potential: 84
+    morale: 74
+    ego: 50
+    salary: 6
+    contractEnd: 2026
+    traits: [老将, 技术反馈强, 稳定]
+    description: 2025 年在银石站拿到职业生涯首个领奖台，结束了长达 239 场的等待。
+
+  - id: bortoleto
+    name: 加布里埃尔·博托莱托
+    short: BOR
+    number: 5
+    nationality: 巴西
+    age: 21
+    team: audi
+    role: race
+    attrs: { pace: 83, racecraft: 81, consistency: 81, tyre: 80, wet: 79, feedback: 78 }
+    potential: 91
+    morale: 70
+    ego: 45
+    salary: 2
+    contractEnd: 2026
+    traits: [F2 冠军, 稳定, 进步神速]
+    description: 2024 年 F2 冠军，2025 年在索伯完成新秀赛季，与车队一起迎来奥迪时代。
+
+  # ── 阿尔派（2026） ──
+  - id: gasly
+    name: 皮埃尔·加斯利
+    short: GAS
+    number: 10
+    nationality: 法国
+    age: 30
+    team: alpine
+    role: race
+    attrs: { pace: 85, racecraft: 86, consistency: 85, tyre: 84, wet: 86, feedback: 85 }
+    potential: 86
+    morale: 64
+    ego: 60
+    salary: 10
+    contractEnd: 2028
+    traits: [大奖赛冠军, 稳定, 车队领袖]
+    description: 2020 年意大利站冠军。2025 年几乎包揽了车队的全部积分，已续约到 2028 年。
+
+  - id: colapinto
+    name: 弗朗哥·科拉平托
+    short: COL
+    number: 43
+    nationality: 阿根廷
+    age: 22
+    team: alpine
+    role: race
+    attrs: { pace: 81, racecraft: 78, consistency: 75, tyre: 78, wet: 78, feedback: 74 }
+    potential: 87
+    morale: 62
+    ego: 55
+    salary: 1.5
+    contractEnd: 2026
+    traits: [人气高, 敢拼, 失误偏多]
+    description: 2025 年赛季中替换杜汉进入阿尔派，拥有大批阿根廷车迷。
+
+  # ── 凯迪拉克（2026） ──
+  - id: bottas
+    name: 瓦尔特利·博塔斯
+    short: BOT
+    number: 77
+    nationality: 芬兰
+    age: 36
+    team: cadillac
+    role: race
+    attrs: { pace: 84, racecraft: 80, consistency: 86, tyre: 85, wet: 81, feedback: 88 }
+    potential: 84
+    morale: 76
+    ego: 40
+    salary: 6
+    contractEnd: 2026
+    traits: [十场大奖赛冠军, 技术反馈强, 团队型]
+    description: 10 场大奖赛冠军，2025 年担任梅赛德斯替补后回归，帮助新车队打基础。
+
+  - id: perez
+    name: 塞尔吉奥·佩雷斯
+    short: PER
+    number: 11
+    nationality: 墨西哥
+    age: 36
+    team: cadillac
+    role: race
+    attrs: { pace: 81, racecraft: 84, consistency: 77, tyre: 89, wet: 82, feedback: 84 }
+    potential: 82
+    morale: 76
+    ego: 55
+    salary: 8
+    contractEnd: 2026
+    traits: [轮胎管理大师, 街道赛专家, 人气高]
+    description: 6 场大奖赛冠军，2024 年底离开红牛，休息一年后回归。
+
+  - id: zhou
+    name: 周冠宇
+    short: ZHO
+    number: 24
+    nationality: 中国
+    age: 26
+    team: cadillac
+    role: reserve
+    attrs: { pace: 79, racecraft: 79, consistency: 81, tyre: 82, wet: 78, feedback: 80 }
+    potential: 82
+    morale: 60
+    ego: 35
+    salary: 1
+    contractEnd: 2026
+    traits: [稳定, 技术反馈好, 中国首位 F1 车手]
+    description: 中国第一位 F1 正式车手，2025 年担任法拉利替补，2026 年加入凯迪拉克任替补。

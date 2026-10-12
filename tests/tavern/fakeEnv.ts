@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { FakeTavern as Base } from '../../dev/fakeTavern';
 import type { WorldbookText } from '../../src/tavern/env';
 import { DATA_FILES } from '../helpers';
@@ -7,7 +6,7 @@ import { DATA_FILES } from '../helpers';
 export function diskWorldbook(): WorldbookText[] {
   return DATA_FILES.map(([name, file]) => ({
     name,
-    content: readFileSync(resolve(__dirname, '../../src/card/worldbook', file), 'utf8'),
+    content: readFileSync(file, 'utf8'),
     book: 'F1 领队模拟器',
   }));
 }

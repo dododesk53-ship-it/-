@@ -7,17 +7,40 @@ import { dispatch } from '../src/engine/actions';
 import type { Action, Database, GameState } from '../src/engine/types';
 
 const WB = resolve(__dirname, '../src/card/worldbook');
+const FIXTURES = resolve(__dirname, 'fixtures');
 
-export const DATA_FILES: Array<[string, string]> = [
-  ['[F1M数据] 规则', 'data-rules.yaml'],
-  ['[F1M数据] 车队', 'data-teams.yaml'],
-  ['[F1M数据] 车手', 'data-drivers.yaml'],
-  ['[F1M数据] 赛道', 'data-tracks.yaml'],
-  ['[F1M数据] 赛历', 'data-calendar.yaml'],
+/** 角色卡实际携带的世界书数据（2026 真实车队与车手） */
+export const CARD_DATA_FILES: Array<[string, string]> = [
+  ['[F1M数据] 规则', resolve(WB, 'data-rules.yaml')],
+  ['[F1M数据] 车队', resolve(WB, 'data-teams.yaml')],
+  ['[F1M数据] 车手', resolve(WB, 'data-drivers.yaml')],
+  ['[F1M数据] 赛道', resolve(WB, 'data-tracks.yaml')],
+  ['[F1M数据] 赛历', resolve(WB, 'data-calendar.yaml')],
 ];
 
+/**
+ * 测试用数据：车队与车手使用固定的占位数据（tests/fixtures），
+ * 这样调整角色卡里的真实数值不会让引擎测试失效。
+ */
+export const DATA_FILES: Array<[string, string]> = CARD_DATA_FILES.map(([name, file]) => [
+  name,
+  name === '[F1M数据] 车队'
+    ? resolve(FIXTURES, 'placeholder-teams.yaml')
+    : name === '[F1M数据] 车手'
+      ? resolve(FIXTURES, 'placeholder-drivers.yaml')
+      : file,
+]);
+
+function readSources(files: Array<[string, string]>): RawSource[] {
+  return files.map(([name, file]) => ({ name, data: YAML.parse(readFileSync(file, 'utf8')) }));
+}
+
 export function placeholderSources(): RawSource[] {
-  return DATA_FILES.map(([name, file]) => ({ name, data: YAML.parse(readFileSync(resolve(WB, file), 'utf8')) }));
+  return readSources(DATA_FILES);
+}
+
+export function cardSources(): RawSource[] {
+  return readSources(CARD_DATA_FILES);
 }
 
 export function placeholderDb(): Database {
