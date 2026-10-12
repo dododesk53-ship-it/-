@@ -23,7 +23,7 @@
   --carbon: repeating-linear-gradient(45deg, rgba(255,255,255,.022) 0 2px, transparent 2px 4px), repeating-linear-gradient(-45deg, rgba(0,0,0,.5) 0 2px, transparent 2px 4px), linear-gradient(180deg, #0c0e13, #07080b);
   --carbon-card: repeating-linear-gradient(45deg, rgba(255,255,255,.016) 0 2px, transparent 2px 4px), linear-gradient(180deg, #12151c, #0d0f14);
   --font: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Noto Sans CJK SC', sans-serif;
-  --font-display: 'Bahnschrift SemiCondensed', 'Bahnschrift', 'DIN Condensed', 'Roboto Condensed', 'Arial Narrow', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-display: 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', 'Bahnschrift SemiCondensed', 'Bahnschrift', 'DIN Condensed', 'Roboto Condensed', 'Arial Narrow', sans-serif;
   --font-num: 'Bahnschrift', 'DIN Alternate', 'Roboto Condensed', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --radius: 3px;
   --skew: -12deg;
