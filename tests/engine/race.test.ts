@@ -14,7 +14,7 @@ describe('比赛模拟', () => {
   it('成绩表完整、名次连续、积分正确', () => {
     const s = atRace(101);
     const { result } = simulateRace(s, new Rng(1), 'race');
-    expect(result.classification).toHaveLength(8);
+    expect(result.classification).toHaveLength(22);
     const finished = result.classification.filter(c => c.status === 'finished');
     finished.forEach((c, i) => expect(c.pos).toBe(i + 1));
     expect(finished[0].points).toBe(25);

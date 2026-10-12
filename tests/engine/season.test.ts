@@ -6,7 +6,7 @@ describe('开局', () => {
   it('生成合法的初始存档', () => {
     const s = newTestGame();
     expect(s.season.phase).toBe('preseason');
-    expect(Object.keys(s.teams)).toHaveLength(4);
+    expect(Object.keys(s.teams)).toHaveLength(11);
     expect(s.teams.team_c.isPlayer).toBe(true);
     for (const t of Object.values(s.teams)) {
       expect(t.cars).toHaveLength(2);
@@ -14,7 +14,7 @@ describe('开局', () => {
     }
     // 替补车手不占车
     expect(s.teams.team_a.cars.map(c => c.driverId)).toEqual(['a1', 'a2']);
-    expect(Object.keys(s.standings.drivers)).toHaveLength(9);
+    expect(Object.keys(s.standings.drivers)).toHaveLength(23);
     expect(s.narration.length).toBeGreaterThan(0);
     // 存档是纯 JSON
     expect(JSON.parse(JSON.stringify(s))).toEqual(s);
@@ -84,7 +84,7 @@ describe('完整赛季流程', () => {
     for (let i = 0; i < 40 && s.season.phase !== 'season_end'; i++) {
       const v = buildView(s);
       expect(v.player.cars).toHaveLength(2);
-      expect(v.standings.teams).toHaveLength(4);
+      expect(v.standings.teams).toHaveLength(11);
       s = act(s, { type: 'ADVANCE' });
     }
     const v = buildView(s);

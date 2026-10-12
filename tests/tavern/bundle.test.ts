@@ -132,7 +132,7 @@ describe.skipIf(!existsSync(BUNDLE))('打包后的后端脚本（dist/f1m-backen
 
     const report = await api.loadData();
     expect(report.ok).toBe(true);
-    expect(report.teams).toHaveLength(4);
+    expect(report.teams).toHaveLength(11);
 
     const r = await api.newGame({ playerTeamId: 'team_b' });
     expect(r.ok).toBe(true);

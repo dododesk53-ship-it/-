@@ -7,9 +7,23 @@ describe('数据解析（世界书 YAML）', () => {
     const res = normalizeDatabase(placeholderSources());
     const errors = res.issues.filter(i => i.level === 'error');
     expect(errors).toEqual([]);
+    expect(res.issues).toEqual([]);
     expect(res.canStart).toBe(true);
-    expect(res.db!.teams).toHaveLength(4);
-    expect(res.db!.drivers).toHaveLength(9);
+    expect(res.db!.teams).toHaveLength(11);
+    expect(res.db!.drivers).toHaveLength(23);
+    for (const t of res.db!.teams) {
+      expect(res.db!.drivers.filter(d => d.teamId === t.id && d.role === 'race')).toHaveLength(2);
+    }
+    expect(new Set(res.db!.drivers.map(d => d.number)).size).toBe(23);
+    // 2026 规则：每支车队都有自己的奖金档和风洞时长档
+    const rules = res.db!.rules;
+    expect(rules.costCap).toBe(215);
+    expect(rules.pointsRace).toEqual([25, 18, 15, 12, 10, 8, 6, 4, 2, 1]);
+    expect(rules.pointsSprint).toEqual([8, 7, 6, 5, 4, 3, 2, 1]);
+    expect(rules.fastestLapPoint).toBe(0);
+    expect(rules.prizeMoney).toHaveLength(11);
+    expect(rules.aeroAllowanceByPosition).toHaveLength(11);
+    expect(rules.aeroAllowanceByPosition[10]).toBe(1.15);
     expect(res.db!.tracks).toHaveLength(3);
     expect(res.db!.calendar).toHaveLength(3);
     expect(res.db!.calendar[1].sprint).toBe(true);
@@ -85,8 +99,8 @@ describe('数据解析（世界书 YAML）', () => {
     const cases: Array<[string, unknown, (r: ReturnType<typeof normalizeDatabase>) => void]> = [
       ['dryCompounds: []', { dryCompounds: [] }, r => expect(r.db!.rules.dryCompounds.length).toBeGreaterThan(0)],
       ['负的研发花费', { parts: { floor: { baseCost: -10 } } }, r => expect(r.db!.rules.parts.floor.baseCost).toBe(3)],
-      ['NaN 预算帽', { costCap: Number.NaN }, r => expect(r.db!.rules.costCap).toBe(135)],
-      ['文本当数字', { costCap: 'abc' }, r => expect(r.db!.rules.costCap).toBe(135)],
+      ['NaN 预算帽', { costCap: Number.NaN }, r => expect(r.db!.rules.costCap).toBe(215)],
+      ['文本当数字', { costCap: 'abc' }, r => expect(r.db!.rules.costCap).toBe(215)],
       ['parts 不是对象', { parts: [1, 2] }, () => {}],
       ['facilities 条目类型错误', { facilities: { cfd: 5 } }, r => expect(r.db!.rules.facilities.cfd.maxLevel).toBe(5)],
       ['tyres 条目缺 pace', { tyres: { soft: { pace: 'fast' } } }, r => expect(typeof r.db!.rules.tyres.soft.pace).toBe('number')],

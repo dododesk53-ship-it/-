@@ -4,17 +4,17 @@
 rules:
   seasonYear: 2026          # 起始赛季年份
 
-  # ── 积分 ──
+  # ── 积分（2026 规则：与 2025 相同，最快圈不加分）──
   # pointsRace: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]   # 正赛积分
   # pointsSprint: [8, 7, 6, 5, 4, 3, 2, 1]            # 冲刺赛积分
   # fastestLapPoint: 0        # 最快圈加分（0 = 不加分）
   # fastestLapTopN: 10        # 最快圈加分需完赛名次在前 N
 
   # ── 财务（单位：百万美元 M$）──
-  # costCap: 135              # 预算帽：研发、生产、维修、运营支出计入
+  # costCap: 215              # 预算帽（2026 规则）：研发、生产、维修、运营支出计入
   # costCapIncludesSalaries: false
   # costCapIncludesFacilities: false
-  # prizeMoney: [140, 125, 112, 100, 90, 80, 72, 64, 56, 50]   # 赛季末按车队排名发奖金
+  # prizeMoney: [140, 125, 112, 100, 90, 80, 72, 64, 56, 50, 45]   # 赛季末按车队排名发奖金（每支车队一档；不够时用最后一档）
   # pointBonus: 0.05          # 每得 1 分的赞助奖金
 
   # ── 速度换算 ──
@@ -23,7 +23,7 @@ rules:
 
   # ── 研发 ──
   # aeroAllowanceBase: 40     # 每个比赛间隔的基础风洞/CFD 时长
-  # aeroAllowanceByPosition: [0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15]  # 排名越靠后时长越多
+  # aeroAllowanceByPosition: [0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15, 1.15]  # 排名越靠后时长越多（2026：第 10 名及新车队 115%）
   # rndSlotsBase: 2           # 同时进行的设计项目数（工厂等级还会增加）
   # partCap: 100              # 零件性能软上限（越接近越难提升）
   # carryOver: 0.6            # 新赛季保留多少研发成果

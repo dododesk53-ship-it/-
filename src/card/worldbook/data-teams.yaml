@@ -81,7 +81,7 @@ teams:
     funds: 50
     sponsorIncome: 3.8
     operatingCost: 2
-    targetPosition: 3
+    targetPosition: 5
     facilities: { windTunnel: 3, cfd: 3, simulator: 3, factory: 3 }
     staff:
       technicalDirector: { name: 技术总监C, skill: 74, salary: 1.8 }
@@ -105,7 +105,7 @@ teams:
     funds: 40
     sponsorIncome: 3
     operatingCost: 1.8
-    targetPosition: 4
+    targetPosition: 10
     facilities: { windTunnel: 2, cfd: 3, simulator: 2, factory: 2 }
     staff:
       technicalDirector: { name: 技术总监D, skill: 68, salary: 1.2 }
@@ -115,3 +115,164 @@ teams:
       strategist: { name: 策略师D, skill: 66, salary: 0.6 }
     carBase: { perf: 74, rel: 78 }
     description: 占位数据：预算有限的尾部车队。
+
+  - id: team_e
+    name: 测试车队E
+    short: TSE
+    color: '#00d2be'
+    principal: 占位领队E
+    engine: 测试动力丙
+    base: 测试基地E
+    funds: 62
+    sponsorIncome: 4.4
+    operatingCost: 2.2
+    targetPosition: 3
+    facilities: { windTunnel: 4, cfd: 4, simulator: 3, factory: 4 }
+    staff:
+      technicalDirector: { name: 技术总监E, skill: 79, salary: 2.4 }
+      aeroChief: { name: 空动主管E, skill: 78, salary: 1.8 }
+      raceEngineer: { name: 工程师E, skill: 77, salary: 0.9 }
+      pitCrew: { skill: 80, salary: 1.3 }
+      strategist: { name: 策略师E, skill: 75, salary: 0.9 }
+    carBase: { perf: 80, rel: 83 }
+    parts:
+      chassis: { perf: 82, rel: 84 }
+      rear_wing: { perf: 82, rel: 85 }
+    description: 占位数据：资源充足的厂商车队，正在冲击冠军。
+
+  - id: team_f
+    name: 测试车队F
+    short: TSF
+    color: '#ff2f8f'
+    principal: 占位领队F
+    engine: 测试动力甲
+    base: 测试基地F
+    funds: 55
+    sponsorIncome: 4.0
+    operatingCost: 2.1
+    targetPosition: 4
+    facilities: { windTunnel: 3, cfd: 4, simulator: 4, factory: 3 }
+    staff:
+      technicalDirector: { name: 技术总监F, skill: 77, salary: 2.0 }
+      aeroChief: { name: 空动主管F, skill: 76, salary: 1.6 }
+      raceEngineer: { name: 工程师F, skill: 76, salary: 0.9 }
+      pitCrew: { skill: 78, salary: 1.2 }
+      strategist: { name: 策略师F, skill: 78, salary: 1.0 }
+    carBase: { perf: 79, rel: 80 }
+    parts:
+      power_unit: { perf: 86, rel: 80 }
+    description: 占位数据：使用强力引擎的客户车队，可靠性一般。
+
+  - id: team_g
+    name: 测试车队G
+    short: TSG
+    color: '#6a5acd'
+    principal: 占位领队G
+    engine: 测试动力乙
+    base: 测试基地G
+    funds: 52
+    sponsorIncome: 3.8
+    operatingCost: 2.0
+    targetPosition: 6
+    facilities: { windTunnel: 3, cfd: 3, simulator: 3, factory: 4 }
+    staff:
+      technicalDirector: { name: 技术总监G, skill: 73, salary: 1.6 }
+      aeroChief: { name: 空动主管G, skill: 71, salary: 1.3 }
+      raceEngineer: { name: 工程师G, skill: 74, salary: 0.8 }
+      pitCrew: { skill: 76, salary: 1.0 }
+      strategist: { name: 策略师G, skill: 72, salary: 0.8 }
+    carBase: { perf: 77, rel: 84 }
+    parts:
+      floor: { perf: 79, rel: 85 }
+    description: 占位数据：工厂设施完善的稳健中游车队。
+
+  - id: team_h
+    name: 测试车队H
+    short: TSH
+    color: '#ffd400'
+    principal: 占位领队H
+    engine: 测试动力丙
+    base: 测试基地H
+    funds: 48
+    sponsorIncome: 3.5
+    operatingCost: 1.9
+    targetPosition: 7
+    facilities: { windTunnel: 3, cfd: 3, simulator: 3, factory: 3 }
+    staff:
+      technicalDirector: { name: 技术总监H, skill: 72, salary: 1.5 }
+      aeroChief: { name: 空动主管H, skill: 73, salary: 1.3 }
+      raceEngineer: { name: 工程师H, skill: 71, salary: 0.7 }
+      pitCrew: { skill: 74, salary: 1.0 }
+      strategist: { name: 策略师H, skill: 70, salary: 0.7 }
+    carBase: { perf: 76, rel: 79 }
+    parts:
+      front_wing: { perf: 79, rel: 80 }
+      sidepods: { perf: 78, rel: 80 }
+    description: 占位数据：空气动力学见长、预算紧张的中游车队。
+
+  - id: team_i
+    name: 测试车队I
+    short: TSI
+    color: '#8b4513'
+    principal: 占位领队I
+    engine: 测试动力丁
+    base: 测试基地I
+    funds: 45
+    sponsorIncome: 3.3
+    operatingCost: 1.9
+    targetPosition: 8
+    facilities: { windTunnel: 2, cfd: 3, simulator: 3, factory: 3 }
+    staff:
+      technicalDirector: { name: 技术总监I, skill: 70, salary: 1.3 }
+      aeroChief: { name: 空动主管I, skill: 69, salary: 1.1 }
+      raceEngineer: { name: 工程师I, skill: 72, salary: 0.7 }
+      pitCrew: { skill: 73, salary: 0.9 }
+      strategist: { name: 策略师I, skill: 71, salary: 0.7 }
+    carBase: { perf: 75, rel: 81 }
+    parts:
+      suspension: { perf: 78, rel: 82 }
+    description: 占位数据：机械设计扎实但空动落后的车队。
+
+  - id: team_j
+    name: 测试车队J
+    short: TSJ
+    color: '#a0a0a0'
+    principal: 占位领队J
+    engine: 测试动力甲
+    base: 测试基地J
+    funds: 42
+    sponsorIncome: 3.1
+    operatingCost: 1.8
+    targetPosition: 9
+    facilities: { windTunnel: 2, cfd: 2, simulator: 3, factory: 2 }
+    staff:
+      technicalDirector: { name: 技术总监J, skill: 69, salary: 1.2 }
+      aeroChief: { name: 空动主管J, skill: 68, salary: 1.0 }
+      raceEngineer: { name: 工程师J, skill: 70, salary: 0.6 }
+      pitCrew: { skill: 71, salary: 0.8 }
+      strategist: { name: 策略师J, skill: 68, salary: 0.6 }
+    carBase: { perf: 74, rel: 77 }
+    parts:
+      power_unit: { perf: 86, rel: 80 }
+    description: 占位数据：依靠客户引擎的小车队。
+
+  - id: team_k
+    name: 测试车队K
+    short: TSK
+    color: '#c8102e'
+    principal: 占位领队K
+    engine: 测试动力丁
+    base: 测试基地K
+    funds: 60
+    sponsorIncome: 3.6
+    operatingCost: 2.0
+    targetPosition: 11
+    facilities: { windTunnel: 3, cfd: 3, simulator: 2, factory: 3 }
+    staff:
+      technicalDirector: { name: 技术总监K, skill: 72, salary: 2.2 }
+      aeroChief: { name: 空动主管K, skill: 70, salary: 1.6 }
+      raceEngineer: { name: 工程师K, skill: 68, salary: 0.8 }
+      pitCrew: { skill: 68, salary: 1.2 }
+      strategist: { name: 策略师K, skill: 66, salary: 0.8 }
+    carBase: { perf: 72, rel: 75 }
+    description: 占位数据：刚刚加入的新车队，资金充裕但经验不足。
