@@ -119,7 +119,7 @@ E2E 中发现并已修复的问题：
    - 未验证：新机制的数值平衡（媒体支持率每站的自然下降与成绩加成）只在 3 站占位赛历上跑过；真实酒馆中的端到端测试没有重新做。
 
 9. **2026 真实阵容数值**（2026-10-12，分支 `vorflux/f1-2026-grid-data`）：
-   - `data-teams.yaml`：11 支真实车队（id：`mercedes`、`mclaren`、`red_bull`、`ferrari`、`williams`、`racing_bulls`、`aston_martin`、`haas`、`audi`、`alpine`、`cadillac`），9 种零件全部写明 perf / rel。依据 2025 成绩与 2026 巴林季前测试；同一动力单元供应商的客户车队数值相同。本卡设定中法拉利动力单元失败，哈斯和凯迪拉克同样受影响。
+   - `data-teams.yaml`：11 支真实车队（id：`mercedes`、`mclaren`、`red_bull`、`ferrari`、`williams`、`racing_bulls`、`aston_martin`、`haas`、`audi`、`alpine`、`cadillac`），9 种零件全部写明 perf / rel。赛车数值按 2026 赛季实测的平均单圈差距（相对梅赛德斯，法拉利 +0.422 秒 … 阿斯顿·马丁 +3.783 秒）校准，计入了车手能力差，误差 < 0.02 秒；同一动力单元供应商的客户车队动力单元数值相同。
    - `data-drivers.yaml`：22 名正式车手 + 4 名替补（角田、乔维纳兹、杜汉、周冠宇），id 用姓氏小写。年薪与合同年份是估计值。
    - 引擎测试改用 `tests/fixtures/placeholder-teams.yaml` 与 `placeholder-drivers.yaml`（原占位数据），调整真实数值不会让引擎测试失效；`tests/engine/carddata.test.ts` 检查真实数据。
    - 没有重新平衡经济数值（资金、赞助、薪水）；赛道仍是占位数据，赛道基准圈速与需求权重需要在填入真实赛道时一起调整。

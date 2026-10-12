@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeDatabase } from '../../src/engine/data';
 import { createGame } from '../../src/engine/newgame';
-import { carRatings } from '../../src/engine/ratings';
+import { carRatings, raceSkill } from '../../src/engine/ratings';
 import type { Database } from '../../src/engine/types';
 import { advanceUntil, cardSources } from '../helpers';
 
@@ -12,6 +12,20 @@ function cardDb(): Database {
   expect(res.canStart).toBe(true);
   return res.db!;
 }
+
+/** 2026 赛季实测：相对梅赛德斯的平均单圈差距（秒） */
+const REAL_GAPS: Record<string, number> = {
+  ferrari: 0.422,
+  mclaren: 0.502,
+  red_bull: 0.676,
+  alpine: 1.657,
+  audi: 1.866,
+  racing_bulls: 1.877,
+  haas: 2.242,
+  williams: 2.454,
+  cadillac: 3.676,
+  aston_martin: 3.783,
+};
 
 const PU_SUPPLIERS: Record<string, string[]> = {
   mercedes: ['mclaren', 'williams', 'alpine'],
@@ -55,15 +69,24 @@ describe('角色卡数据：2026 真实阵容', () => {
     }
   });
 
-  it('赛车性能符合季前格局', () => {
+  it('平均单圈差距符合 2026 实测（误差 < 0.05 秒）', () => {
     const state = createGame(cardDb(), { playerTeamId: 'ferrari', principalName: '测试', seed: 1, gameId: 'g', now: 1 });
     const r = (id: string) => carRatings(state.teams[id], state.teams[id].cars[0], state.rules);
-    const overall = Object.keys(state.teams).sort((a, b) => r(b).overall - r(a).overall);
-    expect(overall[0]).toBe('mercedes');
-    expect(overall.at(-1)).toBe('cadillac');
-    expect(overall.slice(0, 3).sort()).toEqual(['mclaren', 'mercedes', 'red_bull']);
-    // 本卡设定：法拉利动力单元失败，动力属性低于梅赛德斯与红牛-福特动力的车队
-    expect(r('ferrari').power).toBeLessThan(r('williams').power);
+    // 均衡赛道上的单圈损失：赛车综合分与车手正赛能力（两台车平均）
+    const loss = (id: string) => {
+      const t = state.teams[id];
+      const per = t.cars.map(
+        c => (100 - carRatings(t, c, state.rules).overall) * state.rules.secPerCarPoint + (100 - raceSkill(state.drivers[c.driverId!], false)) * state.rules.secPerDriverPoint,
+      );
+      return per.reduce((a, b) => a + b, 0) / per.length;
+    };
+    for (const [id, gap] of Object.entries(REAL_GAPS)) {
+      expect(loss(id) - loss('mercedes'), id).toBeCloseTo(gap, 1);
+    }
+    // 动力单元排序：梅赛德斯 > 法拉利 > 红牛-福特 > 奥迪 > 本田
+    const pu = (id: string) => state.teams[id].parts.power_unit.specs[0].perf;
+    const order = ['mercedes', 'ferrari', 'red_bull', 'audi', 'aston_martin'].map(pu);
+    expect([...order].sort((x, y) => y - x)).toEqual(order);
     expect(r('ferrari').downforce).toBeGreaterThan(r('williams').downforce);
     // 阿斯顿·马丁-本田可靠性全场最差
     const rel = Object.keys(state.teams).sort((a, b) => r(a).reliability - r(b).reliability);
