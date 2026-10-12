@@ -1,9 +1,9 @@
 # F1 领队模拟器 · 交接文档
 
 更新时间：2026-10-12（UTC）
-当前分支：`vorflux/f1-aduo-ui`
-当前 PR：https://github.com/dododesk53-ship-it/-/pull/4
-依赖 PR：https://github.com/dododesk53-ship-it/-/pull/3 → https://github.com/dododesk53-ship-it/-/pull/2 → https://github.com/dododesk53-ship-it/-/pull/1
+当前分支：`vorflux/f1-complete-handoff`
+当前唯一 PR：https://github.com/dododesk53-ship-it/-/pull/5
+旧 PR 1–4 已停用；旧远端分支已删除。
 
 ## 1. 现状
 
@@ -128,7 +128,7 @@ E2E 中发现并已修复的问题：
    - 没有重新平衡经济数值（资金、赞助、薪水）；赛道仍是占位数据，赛道基准圈速与需求权重需要在填入真实赛道时一起调整。
 
 
-10. **ADUO 后端**（2026-10-12，分支 `vorflux/f1-aduo-ui`，PR：https://github.com/dododesk53-ship-it/-/pull/4）：
+10. **ADUO 后端**（2026-10-12，现收录于分支 `vorflux/f1-complete-handoff`，PR：https://github.com/dododesk53-ship-it/-/pull/5）：
    - 入口在 `src/engine/aduo.ts`。动力单元厂商车队用 `TeamDef.worksTeam` 标记。当前厂商车队是梅赛德斯、法拉利、红牛、奥迪、阿斯顿·马丁。
    - 客户车队不能自行研发 `power_unit` / `ers`。厂商车队的新件会复制给同一 `engine` 的客户车队；AI 客户自动装车，玩家客户收到新闻。
    - 每赛季基础认证升级次数为 1。动力单元设计项目开工时计数，取消时返还。旧存档迁移时，进行中的动力单元项目会计入次数。
