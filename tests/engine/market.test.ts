@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../src/engine/actions';
-import { openMarket, previewContractOffer } from '../../src/engine/market';
+import { closeMarket, openMarket, previewContractOffer } from '../../src/engine/market';
+import { resolveAiMarket } from '../../src/engine/market-ai';
+import { migrateState } from '../../src/engine/migrate';
 import { buildView } from '../../src/engine/view';
+import { DEFAULT_RULES } from '../../src/engine/defaults';
 import { newTestGame } from '../helpers';
+
+function nextWindow() {
+  const state = newTestGame();
+  state.market!.window!.status = 'closed';
+  const window = openMarket(state, state.season.year + 1);
+  return { state, window };
+}
 
 describe('确定性合同市场', () => {
   it('报价是纯函数，薪资提高不会降低接受分', () => {
@@ -29,6 +39,104 @@ describe('确定性合同市场', () => {
     const stale = dispatch(accepted.state, action);
     expect(stale.ok).toBe(false);
     expect(stale.state).toBe(accepted.state);
+  });
+
+  it('allows a contracted rival driver buyout and derives replacement from the target seat', () => {
+    const state = newTestGame();
+    state.teams.team_c.funds = 1_000_000;
+    const window = state.market!.window!;
+    const rival = state.teams.team_a.cars[0].driverId!;
+    const ownSeat = state.teams.team_c.cars[0].driverId!;
+    const quote = previewContractOffer(state, 'team_c', {
+      windowId: window.id, marketRevision: state.market!.revision, personId: rival, annualSalary: 100, years: 2, role: 'race', slot: 1, replacePersonId: 'not-authoritative',
+    }, 'driver');
+    expect(quote.blockers).not.toContain('候选人已在预计阵容中');
+    expect(quote.buyout).toBeGreaterThan(0);
+    expect(quote.replacedPersonId).toBe(ownSeat);
+  });
+
+  it('keeps AI ownership local and stays unresolved while any roster is incomplete', () => {
+    const { state } = nextWindow();
+    state.teams.team_c.funds = 1_000_000;
+    const result = resolveAiMarket(state);
+    expect(result.ok).toBe(true);
+    expect(state.market!.window!.aiResolved).toBe(false); // player roster is still empty
+    for (const agreement of state.market!.window!.agreements) {
+      expect(agreement.fromTeamId === null || agreement.fromTeamId === agreement.toTeamId).toBe(true);
+    }
+  });
+
+  it('includes own staff renewals, installs agreed terms, and removes released agreements', () => {
+    const state = newTestGame();
+    state.teams.team_c.funds = 1_000_000;
+    const window = state.market!.window!;
+    const role = 'technicalDirector' as const;
+    const staffId = state.teams.team_c.staff[role].id!;
+    const view = buildView(state);
+    expect(view.market.staff.some(s => s.id === staffId && s.name.length > 0)).toBe(true);
+    const offered = dispatch(state, { type: 'OFFER_STAFF_CONTRACT', windowId: window.id, marketRevision: state.market!.revision, candidateId: staffId, role, annualSalary: 100, years: 2 });
+    expect(offered.ok).toBe(true);
+    const released = dispatch(offered.state, { type: 'RELEASE_PERSON', windowId: window.id, marketRevision: offered.state.market!.revision, personKind: 'staff', personId: staffId });
+    expect(released.ok).toBe(true);
+    expect(released.state.market!.window!.agreements.some(a => a.personId === staffId)).toBe(false);
+
+    // A new renewal is applied to the installed inline staff object at close.
+    const fresh = newTestGame();
+    fresh.teams.team_c.funds = 1_000_000;
+    const freshWindow = fresh.market!.window!;
+    const renewal = dispatch(fresh, { type: 'OFFER_STAFF_CONTRACT', windowId: freshWindow.id, marketRevision: fresh.market!.revision, candidateId: fresh.teams.team_c.staff[role].id!, role, annualSalary: 100, years: 2 });
+    expect(renewal.ok).toBe(true);
+    renewal.state.market!.window!.aiResolved = true;
+    expect(closeMarket(renewal.state).ok).toBe(true);
+    expect(renewal.state.teams.team_c.staff[role].salary).toBe(100);
+    expect(renewal.state.teams.team_c.staff[role].contractEnd).toBe(fresh.season.year + 1);
+  });
+
+  it('migrates market rules on modern saves and does not mutate views', () => {
+    const state = newTestGame();
+    delete (state.rules as Partial<typeof state.rules>).market;
+    migrateState(state);
+    expect(state.rules.market).toEqual(DEFAULT_RULES.market);
+    const before = JSON.stringify(state);
+    buildView(state);
+    expect(JSON.stringify(state)).toBe(before);
+  });
+
+  it('reserves salary against the target cap rather than current spent cap', () => {
+    const state = newTestGame();
+    state.rules.costCapIncludesSalaries = true;
+    state.teams.team_c.costCapSpent = state.rules.costCap;
+    const window = state.market!.window!;
+    const driver = state.teams.team_c.cars[0].driverId!;
+    const quote = previewContractOffer(state, 'team_c', { windowId: window.id, marketRevision: state.market!.revision, personId: driver, annualSalary: 1, years: 1, role: 'race', slot: 1 }, 'driver');
+    expect(quote.blockers).not.toContain('预计工资和人员费用会超出预算帽');
+    expect(quote.projectedCapRemaining).toBeGreaterThan(0);
+  });
+
+  it('creates a fresh market for each simulated offseason', () => {
+    const { state, window } = nextWindow();
+    state.season.phase = 'season_end';
+    const next = dispatch(state, { type: 'START_NEXT_SEASON' });
+    expect(next.ok).toBe(true);
+    const advanced = next.state;
+    expect(advanced.market!.window!.status).toBe('closed');
+    advanced.season.phase = 'season_end';
+    const again = openMarket(advanced, advanced.season.year + 1);
+    expect(again.id).not.toBe(window.id);
+    expect(again.targetYear).toBe(advanced.season.year + 1);
+    expect(advanced.news.some(n => n.text.includes('续约系统尚未实现'))).toBe(false);
+  });
+
+  it('resets first-season PU usage after the initial market and hides closed windows', () => {
+    const state = newTestGame();
+    const driver = state.drivers[state.teams.team_c.cars[0].driverId!];
+    driver.puUsed = { front_wing: 99 };
+    const started = dispatch(state, { type: 'START_SEASON' });
+    expect(started.ok).toBe(true);
+    expect(started.state.drivers[driver.id].puUsed?.front_wing).not.toBe(99);
+    const view = buildView(started.state);
+    expect(view.market.status).toBe('closed');
+    expect(view.market.window).toBeNull();
   });
 
   it('exposes public projected roster and all five staff roles without rival finance', () => {

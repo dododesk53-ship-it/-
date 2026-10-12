@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive } from 'vue';
+import { computed, reactive, watch } from 'vue';
 import { act, store } from '../bridge';
 import Tyre from './Tyre.vue';
 import type { EnergyMode, PaceMode, PitTiming, TeamOrders } from '../../../engine/types';
@@ -12,6 +12,12 @@ const names = computed(() => new Map(v.value.drivers.map(d => [d.id, d.name])));
 const shortNames = computed(() => new Map(v.value.drivers.map(d => [d.id, d.short])));
 const selections = reactive<Record<string, { pit: 'auto' | 'stay_out' | 'box'; compound: string; repairWing: boolean; paceMode: PaceMode; energyMode: EnergyMode; pitTiming: PitTiming }>>({});
 const orders = reactive<TeamOrders>({ mode: 'free', favorDriverId: null });
+const activeWindowId = computed(() => live.value?.pendingDecision?.id ?? '');
+function resetDrafts() {
+  for (const id of Object.keys(selections)) delete selections[id];
+  Object.assign(orders, live.value?.teamOrders ?? { mode: 'free', favorDriverId: null });
+}
+watch(activeWindowId, resetDrafts, { immediate: true });
 
 function choice(id: string) {
   const current = carById.value.get(id);
@@ -39,7 +45,13 @@ async function tactics() {
 }
 async function resolve() {
   if (!live.value?.pendingDecision) return;
-  await act({ type: 'RESOLVE_RACE_DECISION', sessionId: live.value.id, expectedRevision: live.value.revision, windowId: live.value.pendingDecision.id, drivers: drivers.value.map(d => ({ driverId: d.id, ...choice(d.id) })), orders: { ...orders } });
+  // Retired cars remain in timing, but are never submitted to a decision window.
+  const eligible = new Set(live.value.pendingDecision.eligibleDriverIds);
+  await act({ type: 'RESOLVE_RACE_DECISION', sessionId: live.value.id, expectedRevision: live.value.revision, windowId: live.value.pendingDecision.id, drivers: drivers.value.filter(d => eligible.has(d.id)).map(d => { const draft = choice(d.id); return { driverId: d.id, pit: draft.pit, ...(draft.pit === 'box' ? { compound: draft.compound } : {}), repairWing: draft.repairWing, paceMode: draft.paceMode, energyMode: draft.energyMode, pitTiming: draft.pitTiming }; }), orders: { ...orders } });
+}
+async function autoFinish() {
+  if (!live.value) return;
+  await act({ type: live.value.kind === 'sprint' ? 'RUN_SPRINT' : 'RUN_RACE' });
 }
 </script>
 
@@ -49,7 +61,7 @@ async function resolve() {
       <div><div class="tiny muted">当前圈 / {{ live.totalLaps }}</div><b class="lap mono">{{ live.completedLaps }}</b></div>
       <div class="grow"><b>{{ live.pendingDecision ? '比赛已暂停，等待你的指令' : live.raceControl === 'sc' ? '安全车部署中' : live.raceControl === 'vsc' ? '虚拟安全车部署中' : '比赛进行中' }}</b><div class="small muted">{{ weatherLabel() }}<span v-if="live.raceControl"> · {{ live.raceControl.toUpperCase() }}</span></div></div>
       <span v-if="live.pendingDecision" class="badge warn">{{ live.pendingDecision.reasons.map(reasonLabel).join(' · ') }}</span>
-      <button v-else class="primary" :disabled="store.busy" @click="advance('next_decision')">推进至下一窗口</button>
+      <div v-else class="race-actions"><button class="primary" :disabled="store.busy" @click="advance('next_decision')">推进至下一窗口</button><button :disabled="store.busy" @click="autoFinish">自动完成比赛</button></div>
     </div>
 
     <div class="live-grid">
@@ -73,7 +85,7 @@ async function resolve() {
       </div>
 
       <aside class="stack">
-        <section class="card weather"><h3>赛道与短期预报</h3><div class="weather-now">{{ weatherLabel() }}</div><div class="forecast"><span>未来 {{ live.weather.forecast.horizonLaps }} 圈<template v-if="live.weather.forecast.arrivalLaps"> · 约 L{{ live.weather.forecast.arrivalLaps[0] }}–{{ live.weather.forecast.arrivalLaps[1] }}</template></span><b>{{ Math.round(live.weather.forecast.rainProbability * 100) }}% 降雨概率</b><span>强度 {{ Math.round(live.weather.forecast.intensityRange[0] * 100) }}–{{ Math.round(live.weather.forecast.intensityRange[1] * 100) }}% · {{ Math.round(live.weather.forecast.confidence * 100) }}% 置信度</span></div><p class="tiny muted">预报只覆盖短期并可能偏差，不代表未来真实天气。</p></section>
+        <section class="card weather"><h3>赛道与短期预报</h3><div class="weather-now">{{ weatherLabel() }}</div><div class="forecast"><span>未来 {{ live.weather.forecast.horizonLaps }} 圈<template v-if="live.weather.forecast.arrivalLaps"> · 约 {{ live.weather.forecast.arrivalLaps[0] }}–{{ live.weather.forecast.arrivalLaps[1] }} 圈后</template></span><b>{{ Math.round(live.weather.forecast.rainProbability * 100) }}% 降雨概率</b><span>强度 {{ Math.round(live.weather.forecast.intensityRange[0] * 100) }}–{{ Math.round(live.weather.forecast.intensityRange[1] * 100) }}% · {{ Math.round(live.weather.forecast.confidence * 100) }}% 置信度</span></div><p class="tiny muted">预报只覆盖短期并可能偏差，不代表未来真实天气。</p></section>
         <section v-if="live.pendingDecision" class="card decision"><h3>{{ live.pendingDecision.reasons.map(reasonLabel).join(' / ') }}决策</h3><p class="small muted">预计进站损失约 {{ live.pendingDecision.expectedPitLoss.toFixed(1) }} 秒；两车一起确认。</p>
           <div v-for="d in drivers" :key="d.id" class="decision-driver" :class="{ muted: !isEligible(d.id) }"><b>{{ driverShort(d.id) }}</b><template v-if="isEligible(d.id)"><div class="seg"><button :class="{ on: choice(d.id).pit === 'auto' }" @click="choice(d.id).pit = 'auto'">自动</button><button :class="{ on: choice(d.id).pit === 'stay_out' }" @click="choice(d.id).pit = 'stay_out'">留在赛道</button><button :class="{ on: choice(d.id).pit === 'box' }" @click="choice(d.id).pit = 'box'">进站</button></div><label v-if="choice(d.id).pit === 'box'" class="field">轮胎<select v-model="choice(d.id).compound"><option v-for="compound in tyreOptions()" :key="compound" :value="compound">{{ v.labels.tyres[compound]?.name ?? compound }}</option></select></label><label v-if="carById.get(d.id)?.damage" class="small"><input v-model="choice(d.id).repairWing" type="checkbox" /> 同时维修前翼</label></template><span v-else class="tiny">此窗口无需该车操作</span></div>
           <label class="field">车队指令<select v-model="orders.mode"><option value="free">自由比赛</option><option value="hold">保持位置</option><option value="favor">偏向车手</option></select></label><label v-if="orders.mode === 'favor'" class="field">优先车手<select v-model="orders.favorDriverId"><option v-for="d in drivers" :key="d.id" :value="d.id">{{ d.name }}</option></select></label><button class="primary confirm" :disabled="store.busy" @click="resolve">确认指令并继续比赛</button></section>

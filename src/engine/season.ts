@@ -63,6 +63,11 @@ export function startSeason(state: GameState, rng: Rng): Outcome {
     retainUntouchedMarket(state);
     const closed = closeMarket(state);
     if (!closed.ok) return fail(closed.message);
+    // First-season contracts may install a generated free agent after createGame
+    // initialized PU pools; reset against the now-final seats before any race.
+    for (const d of Object.values(state.drivers)) {
+      if (d.teamId) resetPuUsage(state, d, state.teams[d.teamId]?.cars.find(c => c.driverId === d.id));
+    }
   }
   const gap = state.calendar[0]?.weeksGap ?? 0;
   advanceWeeks(state, gap, rng);
@@ -628,9 +633,6 @@ export function startNextSeason(state: GameState, rng: Rng): Outcome {
     d.form = 0;
     d.fitness = 100;
     resetPuUsage(state, d, d.teamId ? state.teams[d.teamId]?.cars.find(c => c.driverId === d.id) : undefined);
-    if (d.teamId && d.contractEnd && d.contractEnd < state.season.year) {
-      addNews(state, '车手', `${d.name} 的合同已于 ${d.contractEnd} 年到期（续约系统尚未实现，暂时继续留队）。`);
-    }
   }
   state.standings = emptyStandings(state);
   state.history = [];

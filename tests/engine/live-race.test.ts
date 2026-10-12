@@ -3,6 +3,7 @@ import { act, advanceUntil, newTestGame, tryAct } from '../helpers';
 import { buildView } from '../../src/engine/view';
 import { buildStatePrompt } from '../../src/engine/prompt';
 import { Rng } from '../../src/engine/rng';
+import { createForecast } from '../../src/engine/raceWeather';
 
 describe('resumable live race', () => {
   function raceReady(seed = 702): ReturnType<typeof newTestGame> {
@@ -60,6 +61,36 @@ describe('resumable live race', () => {
     }
     expect(interactive.weekend?.liveRace).toBeNull();
     expect(interactive.weekend?.race?.classification).toEqual(automatic.weekend?.race?.classification);
+  });
+
+  it('continues with one player retirement and only accepts running eligible choices', () => {
+    const started = act(raceReady(), { type: 'START_RACE', kind: 'race' });
+    const live = started.weekend!.liveRace!;
+    const retired = Object.values(live.cars).find(c => c.player)!;
+    retired.status = 'dnf'; retired.reason = 'test';
+    const running = Object.values(live.cars).find(c => c.player && c.status === 'running')!;
+    const result = act(started, { type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id, drivers: [{ driverId: running.driverId, pit: 'auto' }] });
+    expect(result.weekend!.liveRace?.pendingDecision).toBeNull();
+    expect(result.weekend!.liveRace?.cars[retired.driverId].status).toBe('dnf');
+  });
+
+  it('does not change tyre without a valid box choice and rejects invalid option values', () => {
+    const started = act(raceReady(), { type: 'START_RACE', kind: 'race' });
+    const live = started.weekend!.liveRace!;
+    const car = Object.values(live.cars).find(c => c.player)!;
+    const before = car.tyre;
+    const invalid = tryAct(started, { type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id, drivers: [{ driverId: car.driverId, pit: 'auto', compound: 'W' }] });
+    expect(invalid.ok).toBe(false);
+    expect(started.weekend!.liveRace!.cars[car.driverId].tyre).toBe(before);
+    const badMode = tryAct(started, { type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id, drivers: [{ driverId: car.driverId, pit: 'auto', paceMode: 'warp' as never }] });
+    expect(badMode.ok).toBe(false);
+  });
+
+  it('keeps forecast uncertainty independent from the hidden five-lap weather path', () => {
+    const dry = [0, 0, 0, 0, 0];
+    const forecasts = Array.from({ length: 16 }, (_, i) => createForecast(dry, 0, 0, new Rng(i + 1)));
+    expect(forecasts.some(f => f.arrivalLaps !== null)).toBe(true);
+    expect(forecasts.some(f => f.rainProbability > 0)).toBe(true);
   });
 
   it('restores an exact zero RNG state', () => {

@@ -40,9 +40,13 @@ export function createForecast(
   const uncertainty = Math.max(0.09, 0.32 - strategistSkill / 500);
   const probability = clamp(actualProbability + rng.normal(0, uncertainty), 0, 1);
   const wetIndices = sample.map((v, i) => (v > 0.16 ? i + 1 : -1)).filter(i => i > 0);
-  const noisyArrival = wetIndices.length
+  // Forecasts can both miss a shower and call one that never arrives. The latter
+  // is useful uncertainty, not access to the hidden trajectory.
+  const missesActual = wetIndices.length > 0 && rng.chance(uncertainty * .55);
+  const falsePositive = wetIndices.length === 0 && rng.chance(uncertainty * .4);
+  const noisyArrival = !missesActual && wetIndices.length
     ? Math.max(1, Math.min(5, wetIndices[0] + Math.round(rng.normal(0, 1.2))))
-    : null;
+    : falsePositive ? rng.int(1, 5) : null;
   const low = clamp((sample.length ? Math.min(...sample) : 0) + rng.normal(0, uncertainty / 2), 0, 1);
   const high = clamp((sample.length ? Math.max(...sample) : 0) + rng.normal(0, uncertainty / 2), low, 1);
   return {

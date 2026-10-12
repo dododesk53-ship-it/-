@@ -39,6 +39,7 @@ watch([mode, selected], () => {
   if (!selected.value) return;
   salary.value = selected.value.preference.askingSalary;
   years.value = selected.value.preference.preferredYears;
+  if (mode.value === 'staff') staffRole.value = selected.value.role as StaffRole;
 }, { immediate: true });
 watch(mode, () => { selectedId.value = ''; });
 
@@ -46,7 +47,7 @@ function select(id: string) { selectedId.value = id; }
 function name(id: string | null | undefined) { return id ? view.value.drivers.find(d => d.id === id)?.name ?? id : '空缺'; }
 function existingStaffName(id: string | null | undefined) {
   if (!id) return '空缺';
-  return view.value.player.staff.find(s => s.name === id)?.name ?? id;
+  return staff.value.find(s => s.id === id)?.name ?? id;
 }
 function ownerLabel(teamId: string | null) {
   if (!teamId) return '自由市场';
@@ -60,9 +61,9 @@ function candidateDetail(person: any): string {
 async function submitOffer() {
   if (!window.value || !selected.value || !selectedQuote.value) return;
   if (mode.value === 'drivers') {
-    await act({ type: 'OFFER_DRIVER_CONTRACT', windowId: window.value.id, marketRevision: market.value.revision, driverId: selected.value.id, annualSalary: Number(salary.value), years: Number(years.value), role: role.value, ...(role.value === 'race' ? { slot: Number(slot.value), replaceDriverId: selectedQuote.value.replacedPersonId ?? undefined } : {}) });
+    await act({ type: 'OFFER_DRIVER_CONTRACT', windowId: window.value.id, marketRevision: market.value.revision, driverId: selected.value.id, annualSalary: Number(salary.value), years: Number(years.value), role: role.value, ...(role.value === 'race' ? { slot: Number(slot.value) } : {}) });
   } else {
-    await act({ type: 'OFFER_STAFF_CONTRACT', windowId: window.value.id, marketRevision: market.value.revision, candidateId: selected.value.id, role: staffRole.value, annualSalary: Number(salary.value), years: Number(years.value), replaceStaffId: selectedQuote.value.replacedPersonId ?? undefined });
+    await act({ type: 'OFFER_STAFF_CONTRACT', windowId: window.value.id, marketRevision: market.value.revision, candidateId: selected.value.id, role: staffRole.value, annualSalary: Number(salary.value), years: Number(years.value) });
   }
 }
 async function release(kind: 'driver' | 'staff', id: string) {

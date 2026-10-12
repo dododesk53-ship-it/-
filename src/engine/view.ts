@@ -212,6 +212,7 @@ export interface LiveRaceView {
   playerCars: Array<{ driverId: string; tyre: string; tyreAge: number; damage: boolean; partial: boolean; energy: number; paceMode: string; energyMode: string }>;
   events: Array<{ id: string; lap: number; type: string; text: string; drivers: string[]; key: boolean }>;
   pendingDecision: { id: string; lap: number; reasons: string[]; eligibleDriverIds: string[]; expectedPitLoss: number } | null;
+  teamOrders: import('./types').TeamOrders;
 }
 
 export interface WeekendView {
@@ -234,12 +235,13 @@ export interface WeekendView {
 
 export interface MarketView {
   revision: number;
+  status: 'none' | 'open' | 'ai_resolved' | 'closed';
   window: { id: string; targetYear: number; status: string; aiResolved: boolean } | null;
   closeBlockers: string[];
   current: { raceSeats: Record<string, string | null>; reserveIds: string[]; staff: Record<string, string | null> } | null;
   projected: { raceSeats: Record<string, string | null>; reserveIds: string[]; staff: Record<string, string | null> } | null;
   drivers: Array<{ id: string; name: string; teamId: string | null; role: string; overall: number; salary: number; contractEnd: number; preference: { askingSalary: number; preferredYears: number; desiredStrength: number; preferredTeamId: string | null; acceptsReserve: boolean } }>;
-  staff: Array<{ id: string; name: string; role: string; skill: number; salary: number; contractEnd: number; preference: { askingSalary: number; preferredYears: number; desiredStrength: number; preferredTeamId: string | null } }>;
+  staff: Array<{ id: string; name: string; role: string; teamId: string | null; skill: number; salary: number; contractEnd: number; preference: { askingSalary: number; preferredYears: number; desiredStrength: number; preferredTeamId: string | null } }>;
   agreements: Array<{ personId: string; toTeamId: string; role: string; annualSalary: number; endYear: number }>;
 }
 
@@ -422,11 +424,13 @@ function ferrariView(state: GameState): FerrariView | null {
 
 function marketView(state: GameState): MarketView {
   const market = state.market ?? { version: 1 as const, revision: 0, freeStaff: {}, window: null, completed: [] };
-  const window = market.window;
+  const storedWindow = market.window;
+  const window = storedWindow?.status === 'closed' ? null : storedWindow;
   const playerId = state.meta.playerTeamId;
   const profile = (p: import('./types').CandidatePreference | undefined, salary: number, id: string) => p ?? { askingSalary: salary, preferredYears: 1, desiredStrength: 50, preferredTeamId: null, loyalty: 0, acceptsReserve: true };
   return {
     revision: market.revision,
+    status: storedWindow?.status ?? 'none',
     window: window ? { id: window.id, targetYear: window.targetYear, status: window.status, aiResolved: window.aiResolved } : null,
     closeBlockers: window ? marketCloseBlockers(state) : [],
     current: window ? {
@@ -439,9 +443,12 @@ function marketView(state: GameState): MarketView {
       const p = profile(window?.candidateProfiles[d.id] ?? d.preference, d.salary, d.id);
       return { id: d.id, name: d.name, teamId: d.teamId, role: d.role, overall: driverOverall(d), salary: d.salary, contractEnd: d.contractEnd, preference: { askingSalary: p.askingSalary, preferredYears: p.preferredYears, desiredStrength: p.desiredStrength, preferredTeamId: p.preferredTeamId, acceptsReserve: !!p.acceptsReserve } };
     }),
-    staff: Object.values(market.freeStaff).map(s => {
+    staff: [
+      ...Object.entries(state.teams).flatMap(([teamId, team]) => Object.values(team.staff).map(s => ({ ...s, teamId }))),
+      ...Object.values(market.freeStaff).map(s => ({ ...s, teamId: null })),
+    ].map(s => {
       const p = profile(window?.candidateProfiles[s.id!] ?? s.preference, s.salary, s.id!);
-      return { id: s.id!, name: s.name, role: s.role ?? '', skill: s.skill, salary: s.salary, contractEnd: s.contractEnd ?? 0, preference: { askingSalary: p.askingSalary, preferredYears: p.preferredYears, desiredStrength: p.desiredStrength, preferredTeamId: p.preferredTeamId } };
+      return { id: s.id!, name: s.name || s.id!, role: s.role ?? '', teamId: s.teamId, skill: s.skill, salary: s.salary, contractEnd: s.contractEnd ?? 0, preference: { askingSalary: p.askingSalary, preferredYears: p.preferredYears, desiredStrength: p.desiredStrength, preferredTeamId: p.preferredTeamId } };
     }),
     agreements: (window?.agreements ?? []).filter(a => a.toTeamId === playerId || a.fromTeamId === playerId).map(a => ({ personId: a.personId, toTeamId: a.toTeamId, role: a.driverRole ?? a.staffRole ?? '', annualSalary: a.annualSalary, endYear: a.endYear })),
   };
@@ -692,8 +699,14 @@ function buildWeekendView(state: GameState): WeekendView | null {
           raceControl: live.scLeft > 0 ? 'sc' : live.vscLeft > 0 ? 'vsc' : null,
           weather: { rain: live.rain, surface: live.surface, forecast: live.forecast }, timing,
           playerCars: Object.values(live.cars).filter(c => c.player).map(c => ({ driverId: c.driverId, tyre: c.tyre, tyreAge: c.tyreAge, damage: c.damage > 0, partial: c.partial > 0, energy: c.energy, paceMode: c.plan.paceMode, energyMode: c.energyMode })),
-          events: live.events.slice(-20),
-          pendingDecision: live.pendingDecision ? { id: live.pendingDecision.id, lap: live.pendingDecision.lap, reasons: live.pendingDecision.reasons, eligibleDriverIds: live.pendingDecision.eligibleDriverIds, expectedPitLoss: track?.pitLoss ?? 0 } : null,
+          events: live.events.slice(-20).map(event => {
+            const names = event.drivers.map(id => state.drivers[id]?.short ?? state.drivers[id]?.name ?? id);
+            let text = event.text;
+            event.drivers.forEach((id, index) => { text = text.replaceAll(id, names[index]); });
+            return { ...event, text, drivers: names };
+          }),
+          teamOrders: { ...live.teamOrders },
+          pendingDecision: live.pendingDecision ? { id: live.pendingDecision.id, lap: live.pendingDecision.lap, reasons: live.pendingDecision.reasons, eligibleDriverIds: live.pendingDecision.eligibleDriverIds, expectedPitLoss: (track?.pitLoss ?? 0) * (live.scLeft > 0 ? .5 : live.vscLeft > 0 ? .7 : 1) } : null,
         };
       })();
   return {

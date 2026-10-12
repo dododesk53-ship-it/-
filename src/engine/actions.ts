@@ -34,6 +34,7 @@ import {
   swapDriver,
 } from './season';
 import { validatePlan } from './strategy';
+import { ENERGY_MODES, PACE_MODES, PIT_TIMINGS, validOrders } from './raceDecisions';
 import type { Action, ActionResult, DriverPlan, GameState } from './types';
 import { clamp, deepClone, hashString, round1 } from './util';
 
@@ -167,11 +168,11 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
         const car = live.cars[patch.driverId];
         if (!car || !car.player || car.status !== 'running' || ids.has(patch.driverId)) return fail('实时策略包含无效车手');
         ids.add(patch.driverId);
-        if (patch.paceMode && !PACE.includes(patch.paceMode)) return fail('未知驾驶模式');
-        if (patch.energyMode && !['harvest', 'balanced', 'deploy'].includes(patch.energyMode)) return fail('未知能量模式');
-        if (patch.pitTiming && !TIMING.includes(patch.pitTiming)) return fail('未知进站时机');
+        if (patch.paceMode && !PACE_MODES.includes(patch.paceMode)) return fail('未知驾驶模式');
+        if (patch.energyMode && !ENERGY_MODES.includes(patch.energyMode)) return fail('未知能量模式');
+        if (patch.pitTiming && !PIT_TIMINGS.includes(patch.pitTiming)) return fail('未知进站时机');
       }
-      if (action.orders) { const o = action.orders; if (!['free', 'hold', 'favor'].includes(o.mode) || (o.mode === 'favor' && !Object.values(live.cars).some(c => c.player && c.driverId === o.favorDriverId && c.status === 'running'))) return fail('无效车队指令'); live.teamOrders = { ...o }; }
+      if (action.orders) { if (!validOrders(action.orders, Object.values(live.cars).filter(c => c.player && c.status === 'running').map(c => c.driverId))) return fail('无效车队指令'); live.teamOrders = { ...action.orders }; }
       for (const patch of action.drivers) { const car = live.cars[patch.driverId]; if (patch.paceMode) car.plan.paceMode = patch.paceMode; if (patch.energyMode) car.energyMode = patch.energyMode; if (patch.pitTiming) car.plan.pitTiming = patch.pitTiming; }
       live.revision++;
       return ok('实时策略已更新，将从下一圈生效');

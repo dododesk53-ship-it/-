@@ -31,6 +31,10 @@ function fillMissing(target: Record<string, unknown>, defaults: Record<string, u
 export function migrateState(state: GameState): GameState {
   if (!state?.rules || !state.teams) return state;
   if (state.ferrari === undefined) state.ferrari = null;
+  // Market rules are a closed map, unlike parts/tyres. Modern saves take the
+  // puAllocation fast path below, so fill this before that return.
+  state.rules.market ??= deepClone(DEFAULT_RULES.market);
+  fillMissing(state.rules.market as unknown as Record<string, unknown>, DEFAULT_RULES.market as unknown as Record<string, unknown>);
   // Market migration intentionally precedes the modern-save early return below.
   // It derives stable IDs/preferences without changing funds, results, or RNG.
   const hadMarket = !!state.market;
@@ -39,6 +43,12 @@ export function migrateState(state: GameState): GameState {
   // Live race is additive and must be initialized before the legacy early return.
   // Never synthesize a session or consume RNG while loading an older save.
   if (state.weekend && state.weekend.liveRace === undefined) state.weekend.liveRace = null;
+  if (state.weekend?.liveRace) {
+    const live = state.weekend.liveRace;
+    // Do not attempt to resume malformed or incompatible private simulation data.
+    if (live.version !== 1 || !live.id || !Array.isArray(live.weatherTrajectory) || !live.cars || !Number.isFinite(live.rngState) || live.completedLaps < 0 || live.completedLaps > live.totalLaps) state.weekend.liveRace = null;
+    else live.strategistSkill ??= state.teams[state.meta.playerTeamId]?.staff.strategist.skill ?? 50;
+  }
   // ADUO（2026-10 新增）：旧存档没有厂商车队信息，按「各车队自行研发」处理
   if (state.rules.puAllocation && !state.rules.aduo) state.rules.aduo = deepClone(DEFAULT_RULES.aduo);
   state.aduo ??= { evaluations: [] };

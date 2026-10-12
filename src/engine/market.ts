@@ -1,5 +1,5 @@
 import { STAFF_ROLES } from './defaults';
-import { charge, costCapOf } from './finance';
+import { costCapOf } from './finance';
 import { addNarration, addNews } from './log';
 import { driverOverall } from './ratings';
 import type {
@@ -20,6 +20,11 @@ import { clamp, round1, round2 } from './util';
 export interface MarketOutcome { ok: boolean; message: string }
 const ok = (message: string): MarketOutcome => ({ ok: true, message });
 const fail = (message: string): MarketOutcome => ({ ok: false, message });
+
+/** Market cash is paid now but reserved against the target-year cap in quotes. */
+function chargeMarketCash(state: GameState, teamId: string, amount: number): void {
+  state.teams[teamId].funds = round2(state.teams[teamId].funds - amount);
+}
 
 function preference(id: string, askingSalary: number, reserve = true): CandidatePreference {
   let n = 0;
@@ -104,8 +109,9 @@ export function ensureMarket(state: GameState): MarketState {
       const staff = team.staff[role];
       if (!staff.id) staff.id = `${teamId}-${role}`;
       staff.role = role;
-      staff.contractStart ??= state.season.year;
-      staff.contractEnd ??= state.season.year;
+      if (!staff.name) staff.name = `${team.name} ${role}`;
+      if (!staff.contractStart) staff.contractStart = state.season.year;
+      if (!staff.contractEnd) staff.contractEnd = state.season.year;
       staff.preference ??= profileForStaff(staff);
     }
   }
@@ -182,10 +188,11 @@ function findProjectedOwner(window: MarketWindow, personId: string): string | nu
   return null;
 }
 
-function payrollForRoster(state: GameState, roster: MarketRoster): number {
+function payrollForRoster(state: GameState, roster: MarketRoster, window?: MarketWindow): number {
+  const agreed = (id: string, salary: number) => window?.agreements.find(a => a.personId === id)?.annualSalary ?? salary;
   let total = 0;
-  for (const id of [...Object.values(roster.raceSeats), ...roster.reserveIds]) if (id) total += state.drivers[id]?.salary ?? 0;
-  for (const id of Object.values(roster.staff)) if (id) total += staffById(state, id)?.staff.salary ?? 0;
+  for (const id of [...Object.values(roster.raceSeats), ...roster.reserveIds]) if (id) total += agreed(id, state.drivers[id]?.salary ?? 0);
+  for (const id of Object.values(roster.staff)) if (id) total += agreed(id, staffById(state, id)?.staff.salary ?? 0);
   return round2(total);
 }
 
@@ -211,21 +218,21 @@ export function previewContractOffer(state: GameState, teamId: string, terms: Co
   const person = kind === 'driver' ? state.drivers[terms.personId] : staffById(state, terms.personId)?.staff;
   if (!person) return { ...none, blockers: [...blockers, '候选人不存在'] };
   if (window.agreements.some(a => a.personId === terms.personId)) blockers.push('候选人已接受其他合同');
-  const projectedOwner = findProjectedOwner(window, terms.personId);
-  if (projectedOwner && projectedOwner !== teamId) blockers.push('候选人已在预计阵容中');
-  let replaced: string | null = terms.replacePersonId ?? null;
+  // A projected rival incumbent is a valid buyout target. A binding agreement,
+  // checked above, is the only market lock; clients cannot choose replacements.
+  let replaced: string | null = null;
   if (kind === 'driver') {
     if (terms.role !== 'race' && terms.role !== 'reserve') blockers.push('请选择正式或替补岗位');
     if (terms.role === 'race') {
       const key = terms.slot === undefined ? '' : String(terms.slot);
       if (!key || !(key in roster.raceSeats)) blockers.push('请选择有效车位');
-      else if (!replaced) replaced = roster.raceSeats[key];
+      else replaced = roster.raceSeats[key];
     }
     const pref = window.candidateProfiles[terms.personId] ?? profileForDriver(person as DriverState);
     if (terms.role === 'reserve' && !pref.acceptsReserve) blockers.push('该车手不接受替补合同');
   } else {
     if (!staffRole || (person as StaffMember).role !== staffRole) blockers.push('员工岗位不匹配');
-    else if (!replaced) replaced = roster.staff[staffRole];
+    else replaced = roster.staff[staffRole];
   }
   const fromTeamId = currentOwner(state, terms.personId, kind);
   const buyout = buyoutFor(state, kind, terms.personId, window.targetYear, fromTeamId);
@@ -243,13 +250,16 @@ export function previewContractOffer(state: GameState, teamId: string, terms: Co
     staying,
   };
   const score = 50 + Object.values(factors).reduce((a, b) => a + b, 0);
-  const annualBefore = payrollForRoster(state, roster);
-  const annualAfter = round2(annualBefore - (replaced ? (kind === 'driver' ? state.drivers[replaced]?.salary ?? 0 : staffById(state, replaced)?.staff.salary ?? 0) : 0) + terms.annualSalary);
+  const annualBefore = payrollForRoster(state, roster, window);
+  const replacedSalary = replaced ? (kind === 'driver' ? state.drivers[replaced]?.salary ?? 0 : staffById(state, replaced)?.staff.salary ?? 0) : 0;
+  const annualAfter = round2(annualBefore - (replaced ? (window.agreements.find(a => a.personId === replaced)?.annualSalary ?? replacedSalary) : 0) + terms.annualSalary);
   const immediate = round2(buyout + severance);
   const team = state.teams[teamId];
   const buffer = annualAfter / 52 * state.rules.market.payrollBufferWeeks;
   if (team.funds + 1e-9 < immediate + buffer) blockers.push('资金不足以支付费用并保留工资缓冲');
-  const capCharge = state.rules.costCapIncludesSalaries ? round2(annualAfter + immediate) : 0;
+  const reservedFees = window.escrow.filter(e => e.payerTeamId === teamId && e.capYear === window.targetYear && !e.settled).reduce((sum, e) => sum + e.amount, 0);
+  // Quotes reserve the target season, not this completed season's spent cap.
+  const capCharge = state.rules.costCapIncludesSalaries ? round2(annualAfter + reservedFees + immediate) : 0;
   const capRemain = round2(costCapOf(team, state.rules) - capCharge);
   if (state.rules.costCapIncludesSalaries && capRemain < -1e-9) blockers.push('预计工资和人员费用会超出预算帽');
   return {
@@ -288,7 +298,7 @@ function acceptOffer(state: GameState, teamId: string, quote: ContractQuote, kin
   window.agreements.push(agreement);
   for (const item of [{ amount: quote.buyout, category: 'buyout' as const, recipientTeamId: fromTeamId, recipientPersonId: null }, { amount: quote.severance, category: 'severance' as const, recipientTeamId: null, recipientPersonId: quote.replacedPersonId }]) {
     if (item.amount <= 0) continue;
-    charge(state.teams[teamId], item.amount, item.category, state.rules);
+    chargeMarketCash(state, teamId, item.amount);
     window.escrow.push({ id: `escrow-${window.id}-${window.escrow.length + 1}`, payerTeamId: teamId, recipientTeamId: item.recipientTeamId, recipientPersonId: item.recipientPersonId, amount: item.amount, category: item.category, capYear: window.targetYear, settled: false });
   }
   market.revision++;
@@ -313,13 +323,17 @@ export function releasePerson(state: GameState, teamId: string, windowId: string
   const cost = buyoutFor(state, kind, personId, window.targetYear, teamId);
   if (state.teams[teamId].funds < cost) return fail('资金不足以支付解约金');
   detachProjected(window.projectedRosters[teamId], personId);
-  if (cost) { charge(state.teams[teamId], cost, 'severance', state.rules); window.escrow.push({ id: `escrow-${window.id}-${window.escrow.length + 1}`, payerTeamId: teamId, recipientTeamId: null, recipientPersonId: personId, amount: cost, category: 'severance', capYear: window.targetYear, settled: false }); }
+  // Releasing a person after signing must not leave an agreement that later
+  // overwrites the released person's salary/term during market activation.
+  window.agreements = window.agreements.filter(a => a.personId !== personId);
+  window.releases = window.releases.filter(r => r.personId !== personId);
+  if (cost) { chargeMarketCash(state, teamId, cost); window.escrow.push({ id: `escrow-${window.id}-${window.escrow.length + 1}`, payerTeamId: teamId, recipientTeamId: null, recipientPersonId: personId, amount: cost, category: 'severance', capYear: window.targetYear, settled: false }); }
   window.releases.push({ id: `release-${window.id}-${personId}`, personKind: kind, personId, teamId, effectiveYear: window.targetYear, severance: cost });
   market.revision++; return ok('预计阵容已解约；请在关闭市场前补齐必需岗位');
 }
 
 export function marketCloseBlockers(state: GameState): string[] {
-  const window = ensureMarket(state).window; if (!window) return [];
+  const window = state.market?.window; if (!window || window.status === 'closed') return [];
   const blockers: string[] = [];
   if (!window.aiResolved) blockers.push('请先处理其他车队的合同市场');
   for (const [teamId, roster] of Object.entries(window.projectedRosters)) {

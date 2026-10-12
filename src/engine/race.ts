@@ -10,6 +10,7 @@ import { driverName } from './log';
 import { activeEntries, carRatings, fittedSpec, raceSkill, trackScore } from './ratings';
 import { Rng } from './rng';
 import { createForecast, createWeatherTrajectory, nextWetness, surfaceFor } from './raceWeather';
+import { validOrders, validRaceChoice } from './raceDecisions';
 import {
   degFactor,
   optimizeStints,
@@ -548,7 +549,7 @@ export function simulateRaceLegacy(state: GameState, rng: Rng, kind: 'race' | 's
 
 function liveEvent(session: LiveRaceState, lap: number, type: RaceEvent['type'], text: string, drivers: string[], key: boolean): string {
   const id = `${session.id}:e${session.events.length + 1}`;
-  if (session.events.length < 70 || type === 'finish') session.events.push({ id, lap, type, text, drivers, key });
+  if (session.events.length < 70) session.events.push({ id, lap, type, text, drivers, key });
   return id;
 }
 
@@ -606,19 +607,19 @@ export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sp
     cars[id] = {
       driverId: id, teamId: entry.team.id, slot: entry.car.slot, player: entry.team.isPlayer, grid: index + 1,
       score: trackScore(ratings, track), skill: raceSkill(entry.driver, wet), consistency: entry.driver.attrs.consistency,
-      racecraft: entry.driver.attrs.racecraft, reliability: ratings.reliability, wetSkill: entry.driver.attrs.wet,
+      racecraft: entry.driver.attrs.racecraft, trust: entry.driver.trust, ego: entry.driver.ego, reliability: ratings.reliability, wetSkill: entry.driver.attrs.wet,
       tyreFactor: factor, setupBonus: setup.confidence / 100 * 0.3, pitCrewSkill: entry.team.staff.pitCrew.skill,
       plan, tyre: compounds[0], tyreAge: 0, usedCompounds: [compounds[0]], plannedCompounds: compounds,
       stints: optimizeStints(rules, track, compounds, totalLaps, factor), stintIndex: 0, pits: 0,
       cumulativeTime: index * 0.25, completedLaps: 0, status: 'running', reason: '', bestLap: null,
-      damage: 0, partial: 0, repairPending: false, energy: 65, energyMode: plan.energyMode ?? 'balanced', pendingPit: null,
+      damage: 0, partial: 0, repairPending: false, energy: 65, energyMode: plan.energyMode ?? 'balanced', pendingPit: null, pendingCompound: null,
     };
     if (entry.team.isPlayer) lapChart[id] = [];
   }
   const session: LiveRaceState = {
     version: 1, id: `race-${state.season.number}-${state.season.roundIndex}-${kind}-${state.seq++}`, kind, roundIndex: state.season.roundIndex,
     totalLaps, completedLaps: 0, lap: 1, stage: 'grid', revision: 1, rngState: execution.state, weatherRngState: weatherRng.state,
-    forecastRngState: forecastRng.state, expectedPositions, cars, order: grid, weatherTrajectory: trajectory, weatherHistory: [],
+    forecastRngState: forecastRng.state, strategistSkill: state.teams[state.meta.playerTeamId].staff.strategist.skill, expectedPositions, cars, order: grid, weatherTrajectory: trajectory, weatherHistory: [],
     rain: trajectory[0] ?? 0, wetness: startsWet ? 0.55 : 0, surface: startsWet ? 'wet' : 'dry',
     forecast: createForecast(trajectory, 0, state.teams[state.meta.playerTeamId].staff.strategist.skill, forecastRng),
     scLeft: 0, vscLeft: 0, safetyCars: 0, fastestLap: null, events: [], lapChart, orderOutcomes: [], orderCooldown: {},
@@ -633,7 +634,8 @@ export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sp
 function createWindow(session: LiveRaceState, reasons: RaceDecisionWindow['reasons'], affected: string[], events: string[]): void {
   if (session.pendingDecision) return;
   const eligible = playerCars(session).map(c => c.driverId);
-  if (!eligible.length && !reasons.some(r => r === 'incident')) return;
+  // When both player cars retire, never create an unresolvable decision window.
+  if (!eligible.length) return;
   session.pendingDecision = {
     id: `${session.id}:w${session.revision + session.completedLaps + 1}`, lap: session.lap, stage: 'before_pit', reasons: [...new Set(reasons)],
     affectedDriverIds: [...new Set(affected)], eligibleDriverIds: eligible, observedEventIds: events,
@@ -650,18 +652,23 @@ function tyreMismatch(rules: GameState['rules'], car: LiveRaceCar, wetness: numb
 function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, rng: Rng, force = false): void {
   const track = currentTrack(state);
   const planned = car.stintIndex < car.plannedCompounds.length - 1;
-  const shouldPit = force || car.pendingPit === 'box' || (car.pendingPit !== 'stay_out' && (car.repairPending || (planned && car.tyreAge >= (car.stints[car.stintIndex] ?? session.totalLaps))));
+  // Automatic player strategy and AI use the same observed surface signal.
+  const weatherStop = car.tyreAge >= 2 && tyreMismatch(state.rules, car, session.wetness) > 1.2;
+  const shouldPit = force || car.pendingPit === 'box' || (car.pendingPit !== 'stay_out' && (car.repairPending || weatherStop || (planned && car.tyreAge >= (car.stints[car.stintIndex] ?? session.totalLaps))));
   if (!shouldPit || car.status !== 'running' || session.completedLaps >= session.totalLaps) return;
   const neutral = session.scLeft > 0 ? 0.5 : session.vscLeft > 0 ? 0.7 : 1;
   let stationary = 2.2 + (100 - car.pitCrewSkill) / 100 * 1.3 + rng.range(0, 0.4);
   if (car.repairPending) { stationary += 6; car.damage = 0; car.repairPending = false; const damage = [...session.damageLedger].reverse().find(d => d.driverId === car.driverId && !d.repairedInRace); if (damage) damage.repairedInRace = true; }
-  if (car.pendingPit === 'box' || planned) {
+  if (car.pendingPit === 'box' || planned || weatherStop) {
     if (planned) car.stintIndex += 1;
-    car.tyre = car.plannedCompounds[car.stintIndex] ?? car.tyre;
+    // A decision can choose a compound, but it takes effect only after this car
+    // has actually entered the pits. AI changes respond to the public surface.
+    car.tyre = car.pendingCompound ?? (session.wetness > .42 ? state.rules.wetCompound : car.plannedCompounds[car.stintIndex] ?? car.tyre);
   }
   car.usedCompounds.push(car.tyre); car.tyreAge = 0; car.pits += 1; car.cumulativeTime += track.pitLoss * neutral + stationary;
   liveEvent(session, session.lap, 'pit', `${car.driverId} 进站，换上${state.rules.tyres[car.tyre]?.name ?? car.tyre}`, [car.driverId], car.player);
   car.pendingPit = null;
+  car.pendingCompound = null;
 }
 
 /** Advances exactly through the serializable loop, stopping before a player pit stage when needed. */
@@ -680,7 +687,7 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
     session.wetness = nextWetness(session.wetness, session.rain);
     session.surface = surfaceFor(session.wetness, previousSurface);
     session.weatherHistory.push(session.rain);
-    session.forecast = createForecast(session.weatherTrajectory, session.completedLaps, state.teams[state.meta.playerTeamId].staff.strategist.skill, forecastRng);
+    session.forecast = createForecast(session.weatherTrajectory, session.completedLaps, session.strategistSkill, forecastRng);
     const scActive = session.scLeft > 0, vscActive = session.vscLeft > 0;
     const field = liveCars(session).filter(c => c.status === 'running').sort((a, b) => a.cumulativeTime - b.cumulativeTime);
     const incidentIds: string[] = [];
@@ -690,15 +697,18 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
       const energyDelta = car.energyMode === 'harvest' ? 8 : car.energyMode === 'deploy' ? -10 : 2;
       car.energy = Math.max(0, Math.min(100, car.energy + energyDelta));
       const energyTime = car.energyMode === 'harvest' ? 0.28 : car.energyMode === 'deploy' && car.energy > 0 ? -0.28 : 0;
-      let lapTime = base + tyreLapDelta(rules.tyres[car.tyre], car.tyreAge + 1, car.tyreFactor) + tyreMismatch(rules, car, session.wetness) + PACE_MODE_TIME[car.plan.paceMode] + car.damage + car.partial + energyTime + rng.normal(0, (0.12 + (100 - car.consistency) * .004) * (1 + session.wetness * .5));
+      const paceWear = car.plan.paceMode === 'push' ? 1.15 : car.plan.paceMode === 'conserve' ? .88 : 1;
+      let lapTime = base + tyreLapDelta(rules.tyres[car.tyre], car.tyreAge + 1, car.tyreFactor) * paceWear + tyreMismatch(rules, car, session.wetness) + PACE_MODE_TIME[car.plan.paceMode] + car.damage + car.partial + energyTime + rng.normal(0, (0.12 + (100 - car.consistency) * .004) * (1 + session.wetness * .5));
       if (lap === 1) lapTime += 2.5 + rng.normal(0, .35);
       if (scActive) lapTime = track.baseLap * 1.35 + rng.normal(0, .05);
       else if (vscActive) lapTime = base * 1.25 + rng.normal(0, .05);
       car.cumulativeTime += lapTime; car.completedLaps = lap; car.tyreAge += 1;
       if (!scActive && !vscActive && lap > 1 && car.bestLap === null || (!scActive && !vscActive && lap > 1 && lapTime < (car.bestLap ?? Infinity))) car.bestLap = lapTime;
       if (!scActive && !vscActive) {
-        const pFail = raceFailProb(car.reliability) / session.totalLaps * (car.plan.paceMode === 'push' ? 1.4 : 1);
-        const pCrash = (.02 + (100 - car.consistency) / 100 * .06) * (1 + session.wetness) / session.totalLaps;
+        const paceRisk = car.plan.paceMode === 'push' ? 1.4 : car.plan.paceMode === 'conserve' ? .8 : 1;
+        const energyRisk = car.energyMode === 'deploy' && car.energy < 15 ? 1.35 : car.energyMode === 'deploy' ? 1.12 : 1;
+        const pFail = raceFailProb(car.reliability) / session.totalLaps * paceRisk * energyRisk;
+        const pCrash = (.02 + (100 - car.consistency) / 100 * .06) * (1 + session.wetness) / session.totalLaps * paceRisk * energyRisk;
         if (rng.chance(pFail)) {
           if (rng.chance(.35) && car.partial === 0) { car.partial = rng.range(.6, 1.2); incidentIds.push(liveEvent(session, lap, 'damage', `${car.driverId} 赛车出现动力问题`, [car.driverId], car.player)); }
           else { car.status = 'dnf'; car.reason = '机械故障'; incidentIds.push(liveEvent(session, lap, 'dnf', `${car.driverId} 因机械故障退赛`, [car.driverId], true)); }
@@ -745,16 +755,20 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
       break;
     }
     session.order = liveCars(session).filter(c => c.status === 'running').sort((a, b) => a.cumulativeTime - b.cumulativeTime).map(c => c.driverId);
-    // Team orders are evaluated from observable running order and never reset after a refusal.
+    // Execute an order only for a realistic, close on-track reversal: the favored
+    // car must be immediately behind its teammate and both must still be racing.
     if (session.teamOrders.mode === 'favor' && session.teamOrders.favorDriverId && lap < session.totalLaps - 1) {
       const favored = session.cars[session.teamOrders.favorDriverId];
-      const mate = favored && Object.values(session.cars).find(c => c.player && c.teamId === favored.teamId && c.driverId !== favored.driverId && c.status === 'running');
+      const favoredPos = favored ? session.order.indexOf(favored.driverId) : -1;
+      const mate = favoredPos > 0 ? session.cars[session.order[favoredPos - 1]] : undefined;
       const key = mate && favored ? `${mate.driverId}>${favored.driverId}` : '';
-      if (mate && favored && (session.orderCooldown[key] ?? 0) <= lap) {
-        const complied = rng.chance(Math.max(.3, Math.min(.98, .95 - (100 - mate.racecraft) / 500)));
+      const close = mate && favored && mate.player && mate.teamId === favored.teamId && mate.status === 'running' && favored.status === 'running' && favored.cumulativeTime - mate.cumulativeTime < 2.2;
+      if (close && mate && favored && (session.orderCooldown[key] ?? 0) <= lap) {
+        const compliance = clamp(.25 + mate.trust / 150 - mate.ego / 220 + (favored.racecraft - mate.racecraft) / 500, .08, .92);
+        const complied = rng.chance(compliance);
         session.orderCooldown[key] = lap + 8;
         session.orderOutcomes.push({ lap, yielded: mate.driverId, favored: favored.driverId, complied });
-        if (complied && mate.cumulativeTime < favored.cumulativeTime) { const t = mate.cumulativeTime; mate.cumulativeTime = favored.cumulativeTime + .3; favored.cumulativeTime = t; session.order = liveCars(session).filter(c => c.status === 'running').sort((a, b) => a.cumulativeTime - b.cumulativeTime).map(c => c.driverId); }
+        if (complied) { const t = mate.cumulativeTime; mate.cumulativeTime = favored.cumulativeTime + .3; favored.cumulativeTime = t; session.order = liveCars(session).filter(c => c.status === 'running').sort((a, b) => a.cumulativeTime - b.cumulativeTime).map(c => c.driverId); }
         liveEvent(session, lap, 'order', complied ? `车队指令：${mate.driverId} 让出位置给 ${favored.driverId}` : `${mate.driverId} 拒绝执行车队指令`, [mate.driverId, favored.driverId], true);
       }
     }
@@ -769,13 +783,15 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
     if (session.scLeft > 0 && !scActive) reasons.push('sc');
     if (session.vscLeft > 0 && !vscActive) reasons.push('vsc');
     session.completedLaps = lap;
+    // The control lap was consumed even if we pause at this checkpoint.
+    // Count it down before creating a window so a save/restore cannot extend SC/VSC.
+    if (scActive && --session.scLeft === 0) liveEvent(session, lap, 'sc_end', '安全车回站，比赛重新开始', [], true);
+    else if (vscActive && --session.vscLeft === 0) liveEvent(session, lap, 'sc_end', 'VSC 结束', [], false);
     if (reasons.length && lap < session.totalLaps && playerCars(session).length) {
       createWindow(session, reasons, plannedPlayer.map(c => c.driverId), incidentIds);
       break;
     }
     for (const car of liveCars(session)) executePit(state, session, car, rng);
-    if (scActive && --session.scLeft === 0) liveEvent(session, lap, 'sc_end', '安全车回站，比赛重新开始', [], true);
-    else if (vscActive && --session.vscLeft === 0) liveEvent(session, lap, 'sc_end', 'VSC 结束', [], false);
     if (until === 'next_lap') break;
   }
   session.rngState = rng.state; session.forecastRngState = forecastRng.state;
@@ -787,18 +803,25 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
   const window = session.pendingDecision;
   if (!window || window.id !== windowId) return false;
   const playerIds = playerCars(session).map(c => c.driverId);
+  const eligible = new Set(window.eligibleDriverIds);
   const seen = new Set<string>();
   for (const choice of drivers) {
     const car = session.cars[choice.driverId];
-    if (!car || !car.player || car.status !== 'running' || seen.has(choice.driverId) || !['auto', 'stay_out', 'box'].includes(choice.pit)) return false;
-    if (choice.pit === 'box' && (!choice.compound || !state.rules.tyres[choice.compound])) return false;
+    if (!car || !car.player || car.status !== 'running' || !eligible.has(choice.driverId) || seen.has(choice.driverId) || !validRaceChoice(choice, state.rules.tyres)) return false;
+    // A tyre is meaningful only for a valid box instruction; avoid cosmetic
+    // immediate compound swaps from UI drafts or malformed controller calls.
+    if ((choice.pit === 'box') !== (choice.compound !== undefined)) return false;
     seen.add(choice.driverId);
   }
-  if (orders && (!['free', 'hold', 'favor'].includes(orders.mode) || (orders.mode === 'favor' && (!orders.favorDriverId || !playerIds.includes(orders.favorDriverId))))) return false;
+  if (!validOrders(orders, playerIds)) return false;
   for (const choice of drivers) {
     const car = session.cars[choice.driverId];
     car.pendingPit = choice.pit;
-    if (choice.compound) { car.tyre = choice.compound; if (choice.pit === 'box') { car.plannedCompounds[car.stintIndex + 1] = choice.compound; } }
+    if (choice.pit === 'stay_out') liveEvent(session, session.lap, 'info', `${car.driverId} 确认留在赛道上`, [car.driverId], true);
+    if (choice.pit === 'box' && choice.compound) {
+      car.pendingCompound = choice.compound;
+      car.plannedCompounds[car.stintIndex + 1] = choice.compound;
+    }
     if (choice.repairWing && car.repairPending) car.pendingPit = 'box';
     if (choice.paceMode && ['conserve', 'balanced', 'push'].includes(choice.paceMode)) car.plan.paceMode = choice.paceMode as import('./types').PaceMode;
     if (choice.energyMode) car.energyMode = choice.energyMode;
@@ -835,7 +858,7 @@ export function finishRaceSession(state: GameState, session: LiveRaceState): { r
   if (session.fastestLap && session.kind === 'race' && state.rules.fastestLapPoint > 0) { const e = classification.find(c => c.driverId === session.fastestLap!.driverId); if (e?.pos && e.pos <= state.rules.fastestLapTopN) e.points += state.rules.fastestLapPoint; }
   const wetLaps = session.weatherHistory.filter(v => v > .25).length;
   const summary = wetLaps === 0 ? 'dry' : wetLaps === session.weatherHistory.length ? 'wet' : 'mixed';
-  if (leader) liveEvent(session, session.totalLaps, 'finish', `${leader.driverId} 赢得${session.kind === 'sprint' ? '冲刺赛' : '正赛'}！`, [leader.driverId], true);
+  if (leader && !session.events.some(event => event.type === 'finish')) liveEvent(session, session.totalLaps, 'finish', `${leader.driverId} 赢得${session.kind === 'sprint' ? '冲刺赛' : '正赛'}！`, [leader.driverId], true);
   return { result: { kind: session.kind, weather: wetLaps ? 'wet' : 'dry', weatherSummary: summary, laps: session.totalLaps, classification, events: session.events.map(({ id: _id, ...event }) => event), fastestLap: session.fastestLap, lapChart: session.lapChart, safetyCars: session.safetyCars, orderOutcomes: session.orderOutcomes }, extras: { crashes: session.damageLedger.filter(d => d.affectedPartTypes.length > 0).map(d => ({ teamId: d.teamId, slot: d.slot, driverId: d.driverId, dnf: d.severity === 'dnf' })) } };
 }
 

@@ -35,6 +35,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <Kpi label="员工士气" :value="Math.round(team.staffMorale)" :tone="tone(team.staffMorale)" />
       <Kpi label="风洞/CFD 时长" :value="`${team.aeroHours}h`" sub="每站按排名刷新" />
       <Kpi label="研发槽位" :value="`${p.projects.filter(x => x.kind === 'design').length}/${p.rndSlots}`" sub="进行中的设计项目" />
+      <Kpi label="合同市场" :value="v.market.status === 'closed' ? '已关闭' : v.market.status === 'none' ? '未开放' : '开放中'" :sub="v.market.window ? `${v.market.window.targetYear} 阵容规划` : '当前无需操作'" :tone="v.market.status === 'open' ? 'warn' : ''" />
     </div>
 
     <div v-if="fr" class="card stack-s ferrari">

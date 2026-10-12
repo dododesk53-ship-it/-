@@ -738,6 +738,8 @@ export interface LiveRaceCar {
   skill: number;
   consistency: number;
   racecraft: number;
+  trust: number;
+  ego: number;
   reliability: number;
   wetSkill: number;
   tyreFactor: number;
@@ -762,6 +764,8 @@ export interface LiveRaceCar {
   energy: number;
   energyMode: EnergyMode;
   pendingPit: 'auto' | 'stay_out' | 'box' | null;
+  /** Choice is staged until a real pit stop; never changes track position tyre instantly. */
+  pendingCompound: Compound | null;
 }
 
 export interface RaceDamageRecord {
@@ -800,6 +804,8 @@ export interface LiveRaceState {
   rngState: number;
   weatherRngState: number;
   forecastRngState: number;
+  /** Frozen at lights-out so staff changes cannot alter a restored session. */
+  strategistSkill: number;
   expectedPositions: Record<string, number>;
   cars: Record<string, LiveRaceCar>;
   order: string[];
