@@ -1,8 +1,9 @@
 # F1 领队模拟器 · 交接文档
 
 更新时间：2026-10-12（UTC）
-分支：`vorflux/f1-principal-framework`
-PR：https://github.com/dododesk53-ship-it/-/pull/1
+当前分支：`vorflux/f1-aduo-ui`
+当前 PR：https://github.com/dododesk53-ship-it/-/pull/4
+依赖 PR：https://github.com/dododesk53-ship-it/-/pull/3 → https://github.com/dododesk53-ship-it/-/pull/2 → https://github.com/dododesk53-ship-it/-/pull/1
 
 ## 1. 现状
 
@@ -12,7 +13,9 @@ PR：https://github.com/dododesk53-ship-it/-/pull/1
 - 2026-10-12 已在真实的 SillyTavern 1.19 + 酒馆助手里做了端到端测试，并完成代码审查和修复，结果见第 4 节。
 - 2026-10-12 占位数据扩到 11 支车队（每队 2 名正式车手），默认规则改成 2026 赛季数值，见第 6 节第 7 条。
 - 2026-10-12 后端改成 2026 规则（排位 6/6/10、超车模式与 Boost 取代 DRS、内燃机 / 能量回收系统拆分与配额罚退），并写入法拉利车队与「过渡领队」机制，见第 6 节第 8 条。分支 `vorflux/f1-2026-ferrari`。
-- 2026-10-12 车队与车手换成 2026 年真实阵容的数值（只有数值，没有新的背景资料），见第 6 节第 9 条。分支 `vorflux/f1-2026-grid-data`。
+- 2026-10-12 车队与车手换成 2026 年真实阵容，并按用户给出的平均单圈差距重新校准，见第 6 节第 9 条。分支 `vorflux/f1-2026-grid-data`。
+- 2026-10-12 已实现 ADUO 后端、动力单元厂商 / 客户车队供应关系和认证升级次数，见第 6 节第 10 条。分支 `vorflux/f1-aduo-ui`。
+- F1 TV 转播风格界面已有完整设计稿，但尚未写入 Vue / HUD，见第 6 节第 11 条。
 
 ## 2. 交付物
 
@@ -45,7 +48,7 @@ PR：https://github.com/dododesk53-ship-it/-/pull/1
 
 已验证（本会话实际运行）：
 
-- `npm test`：9 个文件、92 个测试全部通过（2026 规则与法拉利机制有单独的测试文件）。
+- `npm test`：12 个文件、121 个测试全部通过（2026 规则、法拉利机制、真实数据和 ADUO 有单独测试文件）。
   - 引擎：数据校验、完整赛季、可复现、研发与装件、封闭车辆规则、分配不公、预算帽 / 风洞 / 槽位、比赛统计、车队指令、AI 指令、提示词防剧透。
   - 控制器（假酒馆环境）：楼层回滚、swipe、编辑、版本清理、导入导出、读档。
   - 打包产物冒烟测试：在 jsdom 里加载 `dist/f1m-backend.js`。
@@ -123,6 +126,36 @@ E2E 中发现并已修复的问题：
    - `data-drivers.yaml`：22 名正式车手 + 4 名替补（角田、乔维纳兹、杜汉、周冠宇），id 用姓氏小写。年薪与合同年份是估计值。
    - 引擎测试改用 `tests/fixtures/placeholder-teams.yaml` 与 `placeholder-drivers.yaml`（原占位数据），调整真实数值不会让引擎测试失效；`tests/engine/carddata.test.ts` 检查真实数据。
    - 没有重新平衡经济数值（资金、赞助、薪水）；赛道仍是占位数据，赛道基准圈速与需求权重需要在填入真实赛道时一起调整。
+
+
+10. **ADUO 后端**（2026-10-12，分支 `vorflux/f1-aduo-ui`，PR：https://github.com/dododesk53-ship-it/-/pull/4）：
+   - 入口在 `src/engine/aduo.ts`。动力单元厂商车队用 `TeamDef.worksTeam` 标记。当前厂商车队是梅赛德斯、法拉利、红牛、奥迪、阿斯顿·马丁。
+   - 客户车队不能自行研发 `power_unit` / `ers`。厂商车队的新件会复制给同一 `engine` 的客户车队；AI 客户自动装车，玩家客户收到新闻。
+   - 每赛季基础认证升级次数为 1。动力单元设计项目开工时计数，取消时返还。旧存档迁移时，进行中的动力单元项目会计入次数。
+   - 默认在第 6 / 12 / 18 站后评估。落后最佳厂商至少 2% 为一档，至少 4% 为二档。档位按未取整差距判断，显示值才取一位小数。
+   - 一档 / 二档每次分别追加 1 / 2 次认证升级、3 / 5 M$ 本赛季预算帽额度，并把动力单元研发周期乘以 0.9 / 0.8。
+   - 新赛季重置次数、档位和预算帽补偿，并把客户车队的动力单元规格与厂商同步。
+   - `GameView.aduo` 只提供已公布的评估结果，不泄漏实时真实性能。AI 提示词也只显示公开状态。
+   - 测试在 `tests/engine/aduo.test.ts`，覆盖客户限制、认证次数、取消返还、客户供件、评估档位、补偿、新赛季、旧存档和重复厂商校验。
+   - 第一轮代码审查给出 7/10 高风险并阻止合并。提交 `86a67aa` 已修复审查发现的旧存档计数、门槛取整和评估站次问题。建议下一位开发者再做一次复审。
+
+11. **F1 TV 转播风格界面设计稿**（已完成设计，尚未实现）：
+   - 全部文件在 `docs/designs/broadcast-ui/`。入口是 `design-plan.json`，设计令牌是 `tokens.css`，赛车线稿是 `car-topdown.svg`。
+   - 桌面管理面板：左侧常驻排名塔。比赛时显示实时顺序、差距、轮胎、PIT / DNF / 最快圈；其他页面显示车手或车队积分榜。
+   - 手机管理面板：390 px 宽适配，顶部是紧凑排名条；点击后从侧边展开完整排名塔；底部是「总览 / 比赛周末 / 车手 / 赛车 / 研发 / 更多」标签栏。
+   - 研发页：2026 赛车俯视线稿有 9 个零件热点（SVG 组 id 为 `part-<partType>`）。热点按玩家可见的零件性能着色，点击后选择研发零件。
+   - ADUO 卡：显示厂商 / 客户身份、公开差距、档位、升级次数、预算帽额度、研发周期倍率和下次评估站。客户车队的内燃机与 ERS 显示锁定。
+   - HUD：`hud-desktop.html` 与 `hud-phone.html` 各包含正常、法拉利、比赛周末、旧楼层变暗、尚未开局五种状态。
+   - 建议实现组件：`TimingTower.vue`、`CarTopdown.vue`、`AduoCard.vue`、`MobileTabBar.vue`。把 `tokens.css` 合并到面板样式变量，不要把设计稿中的示例数据写死。
+   - `GameView.aduo` 已提供 ADUO 所需数据。排名塔和赛车热点可能需要给 `src/engine/view.ts` 增加最小的公开视图数据。不要向前端暴露未验证零件的真实性能。
+   - `src/tavern/panelHost.ts` 需要在手机宽度使用近全屏面板；桌面保持浮动面板。
+   - 实现后运行 `npm run typecheck`、`npm test`、`npm run build`，再用 980×720 和 390×844 浏览器尺寸检查。还要在真实 SillyTavern 中检查 HUD 和 iframe 高度。
+   - 设计稿中的阿斯顿·马丁 / 本田 ADUO、摩纳哥第 8 站、积分和比赛顺序都是示例，不是真实存档数据。
+
+12. **本次停止点**：
+   - 已完成并推送：真实 2026 阵容、用户提供的圈速差距校准、法拉利动力单元设定修正、ADUO 后端、测试、构建产物、界面设计稿。
+   - 未完成：把设计稿实现为 Vue 面板和 HUD；手机全屏 `panelHost`；界面浏览器测试；ADUO 修复后的第二轮代码审查；真实 SillyTavern 端到端测试。
+   - 不要重新做界面设计。直接按 `docs/designs/broadcast-ui/design-plan.json` 和各 HTML 设计稿实现。
 
 ## 7. 建议的端到端测试步骤
 
