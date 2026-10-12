@@ -341,3 +341,19 @@ label.field > * {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+/* PanelHost mirrors its narrow host mode onto the iframe document. Use this
+   class rather than an iframe media query, whose layout viewport may be wide. */
+html.f1m-mobile .race-ribbon {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+html.f1m-mobile .race-ribbon > .grow { min-width: 0; }
+html.f1m-mobile .race-actions {
+  grid-column: 1 / -1;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+html.f1m-mobile .race-actions button { min-width: 0; }

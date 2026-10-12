@@ -108,7 +108,12 @@ export class PanelHost {
 
   private onResize = () => {
     if (!this.root) return;
-    this.root.classList.toggle('f1m-mobile', this.isMobile());
+    const mobile = this.isMobile();
+    this.root.classList.toggle('f1m-mobile', mobile);
+    // An iframe's CSS media query can retain a desktop layout viewport even
+    // when its host is narrow. Mirror the host mode into the panel document
+    // so component styles can respond to the actual usable panel width.
+    this.frame?.contentDocument?.documentElement.classList.toggle('f1m-mobile', mobile);
   };
 
   private saveGeometry(): void {
@@ -157,6 +162,7 @@ export class PanelHost {
     this.frame.addEventListener(
       'load',
       () => {
+        this.onResize();
         if (this.pendingTab) this.sendTab(this.pendingTab);
         this.pendingTab = null;
       },
