@@ -219,6 +219,7 @@ export const DEFAULT_RULES: Rules = {
 };
 
 export const DEFAULT_PLAN: DriverPlan = {
+  strategySource: 'player',
   practiceProgram: 'setup',
   qualiApproach: 'standard',
   tyrePlan: 'auto',

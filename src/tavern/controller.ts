@@ -538,6 +538,7 @@ export class F1Controller {
     });
     const option = contextRanked[Math.min(level, contextRanked.length - 1)];
     const plan: Partial<DriverPlan> = {
+      strategySource: 'engineer',
       tyrePlan: [...option.compounds],
       paceMode: level >= 4 ? (level === 5 ? 'conserve' : 'push') : 'balanced',
       pitTiming: level >= 4 ? 'late' : 'standard',
@@ -569,7 +570,9 @@ export class F1Controller {
       );
       const fallback = `${gridContext}，干地基础方案为 ${compounds}，预计 ${option.stops} 停，分段 ${option.stints.join('/')} 圈；驾驶模式 ${plan.paceMode}，进站时机 ${plan.pitTiming}。天气预案：${weatherResponse}。`;
       const explanation = safeWeatherAdvice(generated, rainWindow !== null) ? generated : fallback;
-      return { ok: true, message: '车队工程师已提交策略建议', plan, explanation, api, strategyLevel: labels[level], gridPosition, weatherResponse };
+      const applied = await this.dispatch({ type: 'SET_PLAN', driverId, plan });
+      if (!applied.ok) return { ok: false, message: `工程师策略无法自动执行：${applied.message}` };
+      return { ok: true, message: '车队工程师策略已自动应用并执行', plan, explanation, api, strategyLevel: labels[level], gridPosition, weatherResponse };
     } catch (error) {
       return { ok: false, message: `车队工程师请求失败：${error instanceof Error ? error.message : String(error)}` };
     }

@@ -45,10 +45,6 @@ function setPlan(d: WeekendDriverView, patch: Partial<DriverPlan>) {
   return act({ type: 'SET_PLAN', driverId: d.driverId, plan: patch }, { silent: true });
 }
 
-function planIs(d: WeekendDriverView, compounds: string[]): boolean {
-  return Array.isArray(d.plan.tyrePlan) && d.plan.tyrePlan.join('-') === compounds.join('-');
-}
-
 const customPlans = ref<Record<string, string[]>>({});
 const engineerApi = ref<Record<string, 'main' | 'secondary'>>({});
 const engineerSuggestions = ref<Record<string, EngineerStrategyResult>>({});
@@ -88,10 +84,11 @@ function engineerApiFor(driverId: string): 'main' | 'secondary' {
   return engineerApi.value[driverId] ?? store.status?.settings.engineerApi ?? 'main';
 }
 
-function applyEngineer(d: WeekendDriverView) {
-  const plan = engineerSuggestions.value[d.driverId]?.plan;
-  if (plan) void setPlan(d, plan);
+function usePlayerStrategy(d: WeekendDriverView) {
+  void setPlan(d, { strategySource: 'player', tyrePlan: [...customFor(d)] });
 }
+
+const strategyRiskTeam = computed(() => ['ferrari', 'mclaren', 'aston_martin'].includes(v.value.player.team.id));
 
 function name(id: string): string {
   return v.value.drivers.find(d => d.id === id)?.name ?? id;
@@ -217,23 +214,23 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
               </button>
             </div>
           </div>
-          <div class="block">
-            <div class="label">正赛轮胎策略 <span class="tiny muted">（预测为干地；下雨时策略组会自动换雨胎）</span></div>
+          <div class="block stack-s">
+            <div class="label">正赛策略</div>
+            <div class="notice bad small"><b>注意：工程师给的策略不一定靠谱。</b> 选择“听工程师”后，方案会自动应用并在比赛中执行。</div>
+            <div v-if="strategyRiskTeam" class="notice warn tiny"><b>高风险提示：</b>本车队策略部门历史表现不稳定，雨战判断尤其需要谨慎。</div>
+            <div class="row wrap">
+              <div class="seg">
+                <button :class="{ on: d.plan.strategySource !== 'engineer' }" :disabled="done.race || store.busy" @click="usePlayerStrategy(d)">玩家自己做策略</button>
+                <button :class="{ on: d.plan.strategySource === 'engineer' }" :disabled="done.race || store.busy" @click="askEngineer(d)">听工程师</button>
+              </div>
+              <select :value="engineerApiFor(d.driverId)" class="small" :disabled="store.busy" @change="engineerApi[d.driverId] = ($event.target as HTMLSelectElement).value as 'main' | 'secondary'">
+                <option value="main">主 API</option><option value="secondary">副 API</option>
+              </select>
+            </div>
             <div class="plans">
-              <div v-if="d.plan.tyrePlan === 'auto'" class="tiny muted">当前使用策略组默认方案。请选择下方任一方案以固定本站策略。</div>
-              <label v-for="(o, optionIndex) in d.options.slice(0, 2)" :key="o.id" class="plan" :class="{ on: planIs(d, o.compounds) }">
-                <input type="radio" :checked="planIs(d, o.compounds)" :disabled="done.race || store.busy" @change="setPlan(d, { tyrePlan: o.compounds })" />
-                <span class="badge">{{ optionIndex + 1 }}</span>
-                <span class="row grow" style="gap: 4px">
-                  <Tyre v-for="(c, i) in o.compounds" :key="i" :c="c" />
-                  <span class="small">{{ o.stops }} 停</span>
-                  <span class="tiny muted">分段 {{ o.stints.join('/') }} 圈</span>
-                </span>
-                <span class="mono small" :class="o.delta === 0 ? 'pos' : 'muted'">{{ o.delta === 0 ? '最优' : `+${o.delta}s` }}</span>
-              </label>
-              <div class="plan" :class="{ on: planIs(d, customFor(d)) }">
-                <span class="badge">3</span>
-                <span class="small">玩家自定</span>
+              <div v-if="d.plan.strategySource !== 'engineer'" class="plan on">
+                <span class="badge">玩家</span>
+                <span class="small">自定轮胎方案</span>
                 <span class="row grow wrap" style="gap: 4px">
                   <select v-for="(compound, index) in customFor(d)" :key="index" :value="compound" :disabled="done.race || store.busy" @change="setCustomCompound(d, index, ($event.target as HTMLSelectElement).value)">
                     <option v-for="c in v.rules.dryCompounds" :key="c" :value="c">{{ v.labels.tyres[c]?.name ?? c }}</option>
@@ -241,20 +238,18 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
                   <button class="small" :disabled="done.race || store.busy || customFor(d).length >= 4" @click="addCustomCompound(d)">＋</button>
                   <button class="small" :disabled="done.race || store.busy || customFor(d).length <= 2" @click="removeCustomCompound(d)">－</button>
                 </span>
-                <button class="small" :disabled="done.race || store.busy" @click="setPlan(d, { tyrePlan: [...customFor(d)] })">采用</button>
+                <button class="small" :disabled="done.race || store.busy" @click="setPlan(d, { strategySource: 'player', tyrePlan: [...customFor(d)] })">采用</button>
               </div>
-              <div class="plan engineer-plan" :class="{ on: engineerSuggestions[d.driverId]?.plan?.tyrePlan && planIs(d, engineerSuggestions[d.driverId].plan!.tyrePlan as string[]) }">
-                <span class="badge">4</span>
+              <div v-else class="plan engineer-plan on">
+                <span class="badge">工程师</span>
                 <span class="grow stack-s">
-                  <b class="small">车队工程师建议</b>
+                  <b class="small">工程师策略已自动执行</b>
                   <span v-if="engineerSuggestions[d.driverId]?.explanation" class="tiny">{{ engineerSuggestions[d.driverId].explanation }}</span>
                   <span v-if="engineerSuggestions[d.driverId]?.weatherResponse && !engineerSuggestions[d.driverId]?.explanation?.includes(engineerSuggestions[d.driverId].weatherResponse!)" class="tiny muted">{{ engineerSuggestions[d.driverId].weatherResponse }}</span>
-                  <span v-if="!engineerSuggestions[d.driverId]?.explanation && !engineerSuggestions[d.driverId]?.weatherResponse" class="tiny muted">建议质量取决于车队策略部门水平。</span>
+                  <span v-if="!engineerSuggestions[d.driverId]?.explanation && !engineerSuggestions[d.driverId]?.weatherResponse" class="tiny muted">当前使用已保存的工程师方案。建议质量取决于车队策略部门水平。</span>
                 </span>
                 <span class="engineer-actions">
-                  <select :value="engineerApiFor(d.driverId)" class="small" :disabled="store.busy" @change="engineerApi[d.driverId] = ($event.target as HTMLSelectElement).value as 'main' | 'secondary'"><option value="main">主 API</option><option value="secondary">副 API</option></select>
-                  <button class="small" :disabled="done.race || store.busy" @click="askEngineer(d)">询问</button>
-                  <button v-if="engineerSuggestions[d.driverId]?.plan" class="small primary" :disabled="done.race || store.busy" @click="applyEngineer(d)">采用</button>
+                  <button class="small" :disabled="done.race || store.busy" @click="askEngineer(d)">重新询问并应用</button>
                 </span>
               </div>
             </div>
@@ -263,7 +258,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
               <span v-for="(life, c) in d.tyreLife" :key="c" class="row" style="gap: 3px"><Tyre :c="String(c)" />{{ life }}</span>
             </div>
           </div>
-          <div class="block row">
+          <div v-if="d.plan.strategySource !== 'engineer'" class="block row">
             <div>
               <div class="label">驾驶模式</div>
               <div class="seg">

@@ -58,6 +58,14 @@ onMounted(load);
       <p class="muted small">选择你要执掌的车队。数据来自角色卡世界书中名字以「[F1M数据]」开头的条目，可随时修改后点击「重新读取」。</p>
     </div>
 
+    <div class="card notice bad strategy-warning">
+      <b>重要提醒：工程师给的策略不一定靠谱。</b>
+      <span class="small">选择“听工程师”后，工程师方案会自动应用并在比赛中执行。</span>
+    </div>
+    <div v-if="['ferrari', 'mclaren', 'aston_martin'].includes(teamId)" class="card notice warn small">
+      <b>高风险提示：</b>该车队策略部门历史表现不稳定，雨战判断尤其需要谨慎。
+    </div>
+
     <div class="card stack-s">
       <div class="spread">
         <h3>数据检查</h3>
@@ -190,5 +198,11 @@ onMounted(load);
 .notice.ferrari ul {
   margin: 0;
   padding-left: 18px;
+}
+.strategy-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-left: 6px solid var(--red);
 }
 </style>

@@ -601,6 +601,8 @@ export interface Standings {
 export type EnergyMode = 'harvest' | 'balanced' | 'deploy';
 
 export interface DriverPlan {
+  /** 策略来源；旧存档缺失时按玩家策略处理。 */
+  strategySource?: 'player' | 'engineer';
   practiceProgram: PracticeProgram;
   qualiApproach: QualiApproach;
   /** 轮胎策略：各段配方；'auto' 由策略组自动选择 */
@@ -768,6 +770,11 @@ export interface LiveRaceCar {
   pendingCompound: Compound | null;
   /** Prevents a stay-out acknowledgement being immediately re-prompted next lap. */
   stayOutUntilLap: number;
+  /** 工程师天气判断使用独立确定性随机流，不消耗比赛主随机流。 */
+  engineerLightRainAssessed?: boolean;
+  engineerWetAssessed?: boolean;
+  engineerTyreOverride?: Compound | null;
+  engineerTyreOverrideUntilLap?: number;
 }
 
 export interface RaceDamageRecord {

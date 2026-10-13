@@ -58,6 +58,10 @@ function setPlan(state: GameState, driverId: string, patch: Partial<DriverPlan>)
   if (!state.weekend) return fail('比赛周末开始后才能设置本站策略');
   const plan = state.weekend.plans[driverId] ?? deepClone(DEFAULT_PLAN);
   const rules = state.rules;
+  if (patch.strategySource !== undefined) {
+    if (patch.strategySource !== 'player' && patch.strategySource !== 'engineer') return fail('未知策略来源');
+    plan.strategySource = patch.strategySource;
+  }
   if (patch.practiceProgram !== undefined) {
     if (!PROGRAMS.includes(patch.practiceProgram)) return fail('未知练习赛项目');
     if (state.weekend.practice) return fail('练习赛已经结束');
