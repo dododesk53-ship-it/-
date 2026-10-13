@@ -5,6 +5,7 @@ import { buildStatePrompt } from '../../src/engine/prompt';
 import { Rng } from '../../src/engine/rng';
 import { createForecast } from '../../src/engine/raceWeather';
 import { migrateState } from '../../src/engine/migrate';
+import { teammateRelationship, willDisobeyStrategy } from '../../src/engine/driverBehavior';
 
 describe('resumable live race', () => {
   function raceReady(seed = 702): ReturnType<typeof newTestGame> {
@@ -43,6 +44,50 @@ describe('resumable live race', () => {
     });
     expect(resolved.weekend!.liveRace?.pendingDecision).toBeNull();
     expect(resolved.weekend!.liveRace?.revision).toBeGreaterThan(live.revision);
+  });
+
+  it('does not treat an unchanged grid confirmation as a strategy instruction', () => {
+    const ready = raceReady();
+    for (const driver of Object.values(ready.drivers).filter(d => d.teamId === ready.meta.playerTeamId)) driver.trust = 0;
+    const started = act(ready, { type: 'START_RACE', kind: 'race' });
+    const live = started.weekend!.liveRace!;
+    const drivers = Object.values(live.cars).filter(c => c.player).map(car => ({
+      driverId: car.driverId,
+      pit: 'auto' as const,
+      paceMode: car.plan.paceMode,
+      energyMode: car.energyMode,
+      pitTiming: car.plan.pitTiming,
+    }));
+    const resolved = act(started, { type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id, drivers });
+    expect(resolved.weekend!.liveRace!.events.some(event => event.text.includes('拒绝临场策略指令'))).toBe(false);
+  });
+
+  it('keeps driver behavior rolls outside the main race random stream', () => {
+    const automatic = raceReady(812);
+    const instructed = raceReady(812);
+    instructed.drivers.c1.trust = 0;
+    automatic.drivers.c1.trust = 0;
+    const planned = act(instructed, { type: 'SET_PLAN', driverId: 'c1', plan: { paceMode: 'push', pitTiming: 'late' } });
+    const automaticRace = act(automatic, { type: 'START_RACE', kind: 'race' }).weekend!.liveRace!;
+    const instructedRace = act(planned, { type: 'START_RACE', kind: 'race' }).weekend!.liveRace!;
+    expect(instructedRace.id).toBe(automaticRace.id);
+    expect(instructedRace.rngState).toBe(automaticRace.rngState);
+    expect(instructedRace.weatherRngState).toBe(automaticRace.weatherRngState);
+  });
+
+  it('can refuse a changed live tactic through a deterministic behavior roll', () => {
+    const ready = raceReady(913);
+    ready.drivers.c1.trust = 0;
+    const launched = act(ready, { type: 'START_RACE', kind: 'race' });
+    const grid = launched.weekend!.liveRace!;
+    const started = act(launched, { type: 'RESOLVE_RACE_DECISION', sessionId: grid.id, expectedRevision: grid.revision, windowId: grid.pendingDecision!.id, drivers: Object.values(grid.cars).filter(c => c.player).map(c => ({ driverId: c.driverId, pit: 'auto' })) });
+    const live = started.weekend!.liveRace!;
+    const relationship = teammateRelationship(started, started.meta.playerTeamId);
+    while (!willDisobeyStrategy(started.drivers.c1, relationship, `${live.id}:tactics:${live.revision}:c1`)) live.revision++;
+    const before = live.cars.c1.plan.paceMode;
+    const result = act(started, { type: 'SET_RACE_TACTICS', sessionId: live.id, expectedRevision: live.revision, drivers: [{ driverId: 'c1', paceMode: before === 'push' ? 'conserve' : 'push' }] });
+    expect(result.weekend!.liveRace!.cars.c1.plan.paceMode).toBe(before);
+    expect(result.weekend!.liveRace!.events.at(-1)?.text).toContain('拒绝实时策略调整');
   });
 
   it('matches automatic completion when every interactive window delegates to auto', () => {

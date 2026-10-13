@@ -6,7 +6,7 @@
  * 安全车/虚拟安全车。最终产出成绩表、关键事件、车手走势。
  */
 import { DEFAULT_PLAN } from './defaults';
-import { strategyDisobedienceChance, teammateRelationship } from './driverBehavior';
+import { strategyDisobedienceChance, teammateRelationship, willDisobeyStrategy } from './driverBehavior';
 import { driverName } from './log';
 import { activeEntries, carRatings, fittedSpec, raceSkill, trackScore } from './ratings';
 import { Rng } from './rng';
@@ -590,6 +590,7 @@ export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sp
   }
   const startsWet = (kind === 'race' ? w.weather.race : w.weather.sprint) === 'wet';
   const trajectory = createWeatherTrajectory(totalLaps, startsWet, track.rainChance, weatherRng);
+  const sessionId = `race-${state.season.number}-${state.season.roundIndex}-${kind}-${state.seq++}`;
   const cars: Record<string, LiveRaceCar> = {};
   const lapChart: Record<string, number[]> = {};
   const disobedient: string[] = [];
@@ -599,8 +600,8 @@ export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sp
     const ratings = carRatings(entry.team, entry.car, rules);
     let plan = entry.team.isPlayer ? { ...planOf(state, id) } : { ...DEFAULT_PLAN };
     const instructed = entry.team.isPlayer && (plan.tyrePlan !== 'auto' || plan.paceMode !== 'balanced' || plan.pitTiming !== 'standard');
-    if (instructed && execution.chance(strategyDisobedienceChance(entry.driver, playerRelationship))) {
-      plan = { ...plan, tyrePlan: 'auto', paceMode: 'balanced', pitTiming: 'standard' };
+    if (instructed && willDisobeyStrategy(entry.driver, playerRelationship, `${sessionId}:pre-race:${id}`)) {
+      plan = { ...plan, paceMode: entry.driver.ego >= 50 ? 'push' : 'conserve', pitTiming: 'late', scReaction: false };
       disobedient.push(id);
     }
     const setup = w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 };
@@ -626,7 +627,7 @@ export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sp
     if (entry.team.isPlayer) lapChart[id] = [];
   }
   const session: LiveRaceState = {
-    version: 1, id: `race-${state.season.number}-${state.season.roundIndex}-${kind}-${state.seq++}`, kind, roundIndex: state.season.roundIndex,
+    version: 1, id: sessionId, kind, roundIndex: state.season.roundIndex,
     totalLaps, completedLaps: 0, lap: 1, stage: 'grid', revision: 1, rngState: execution.state, weatherRngState: weatherRng.state,
     forecastRngState: forecastRng.state, strategistSkill: state.teams[state.meta.playerTeamId].staff.strategist.skill, expectedPositions, cars, order: grid, weatherTrajectory: trajectory, weatherHistory: [],
     rain: trajectory[0] ?? 0, wetness: startsWet ? 0.55 : 0, surface: startsWet ? 'wet' : 'dry',
@@ -842,7 +843,7 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
   if (session.completedLaps >= session.totalLaps && !session.pendingDecision) session.stage = 'finished';
 }
 
-/** Applies a validated window decision without consuming race randomness until the suspended pit stage. */
+/** Applies a validated window decision. Driver-behavior rolls use a separate deterministic stream. */
 export function applyRaceDecision(state: GameState, session: LiveRaceState, windowId: string, drivers: Array<{ driverId: string; pit: 'auto' | 'stay_out' | 'box'; compound?: Compound; repairWing?: boolean; paceMode?: EnergyMode | 'conserve' | 'balanced' | 'push'; energyMode?: EnergyMode; pitTiming?: 'early' | 'standard' | 'late' }>, orders?: import('./types').TeamOrders): boolean {
   const window = session.pendingDecision;
   if (!window || window.id !== windowId) return false;
@@ -858,15 +859,14 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
     seen.add(choice.driverId);
   }
   if (!validOrders(orders, playerIds)) return false;
-  const decisionRng = Rng.restore(session.rngState);
   const relationship = teammateRelationship(state, state.meta.playerTeamId);
   const ignored = new Set<string>();
   for (const choice of drivers) {
     const driver = state.drivers[choice.driverId];
-    const isInstruction = choice.pit !== 'auto' || !!choice.repairWing || !!choice.paceMode || !!choice.energyMode || !!choice.pitTiming;
-    if (driver && isInstruction && decisionRng.chance(strategyDisobedienceChance(driver, relationship))) ignored.add(choice.driverId);
+    const car = session.cars[choice.driverId];
+    const isInstruction = choice.pit !== 'auto' || !!choice.repairWing || (choice.paceMode !== undefined && choice.paceMode !== car.plan.paceMode) || (choice.energyMode !== undefined && choice.energyMode !== car.energyMode) || (choice.pitTiming !== undefined && choice.pitTiming !== car.plan.pitTiming);
+    if (driver && isInstruction && willDisobeyStrategy(driver, relationship, `${session.id}:${window.id}:${driver.id}`)) ignored.add(choice.driverId);
   }
-  session.rngState = decisionRng.state;
   for (const choice of drivers) {
     const car = session.cars[choice.driverId];
     if (ignored.has(choice.driverId)) {

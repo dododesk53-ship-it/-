@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import Bar from '../components/Bar.vue';
 import LapChart from '../components/LapChart.vue';
 import Tyre from '../components/Tyre.vue';
@@ -52,6 +52,10 @@ function planIs(d: WeekendDriverView, compounds: string[]): boolean {
 const customPlans = ref<Record<string, string[]>>({});
 const engineerApi = ref<Record<string, 'main' | 'secondary'>>({});
 const engineerSuggestions = ref<Record<string, EngineerStrategyResult>>({});
+watch(() => w.value?.roundIndex, () => {
+  customPlans.value = {};
+  engineerSuggestions.value = {};
+});
 
 function customFor(d: WeekendDriverView): string[] {
   if (!customPlans.value[d.driverId]) {
@@ -76,8 +80,12 @@ function removeCustomCompound(d: WeekendDriverView) {
 }
 
 async function askEngineer(d: WeekendDriverView) {
-  const result = await call(a => a.requestEngineerStrategy(d.driverId, engineerApi.value[d.driverId] ?? 'main'));
+  const result = await call(a => a.requestEngineerStrategy(d.driverId, engineerApi.value[d.driverId]));
   if (result?.ok) engineerSuggestions.value[d.driverId] = result;
+}
+
+function engineerApiFor(driverId: string): 'main' | 'secondary' {
+  return engineerApi.value[driverId] ?? store.status?.settings.engineerApi ?? 'main';
 }
 
 function applyEngineer(d: WeekendDriverView) {
@@ -211,8 +219,8 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
           <div class="block">
             <div class="label">正赛轮胎策略 <span class="tiny muted">（预测为干地；下雨时策略组会自动换雨胎）</span></div>
             <div class="plans">
-              <label v-for="(o, optionIndex) in d.options.slice(0, 2)" :key="o.id" class="plan" :class="{ on: planIs(d, o.compounds) }">
-                <input type="radio" :checked="planIs(d, o.compounds)" :disabled="done.race || store.busy" @change="setPlan(d, { tyrePlan: o.compounds })" />
+              <label v-for="(o, optionIndex) in d.options.slice(0, 2)" :key="o.id" class="plan" :class="{ on: planIs(d, o.compounds) || (optionIndex === 0 && d.plan.tyrePlan === 'auto') }">
+                <input type="radio" :checked="planIs(d, o.compounds) || (optionIndex === 0 && d.plan.tyrePlan === 'auto')" :disabled="done.race || store.busy" @change="setPlan(d, { tyrePlan: o.compounds })" />
                 <span class="badge">{{ optionIndex + 1 }}</span>
                 <span class="row grow" style="gap: 4px">
                   <Tyre v-for="(c, i) in o.compounds" :key="i" :c="c" />
@@ -228,8 +236,8 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
                   <select v-for="(compound, index) in customFor(d)" :key="index" :value="compound" :disabled="done.race || store.busy" @change="setCustomCompound(d, index, ($event.target as HTMLSelectElement).value)">
                     <option v-for="c in v.rules.dryCompounds" :key="c" :value="c">{{ v.labels.tyres[c]?.name ?? c }}</option>
                   </select>
-                  <button class="small" :disabled="customFor(d).length >= 4" @click="addCustomCompound(d)">＋</button>
-                  <button class="small" :disabled="customFor(d).length <= 2" @click="removeCustomCompound(d)">－</button>
+                  <button class="small" :disabled="done.race || store.busy || customFor(d).length >= 4" @click="addCustomCompound(d)">＋</button>
+                  <button class="small" :disabled="done.race || store.busy || customFor(d).length <= 2" @click="removeCustomCompound(d)">－</button>
                 </span>
                 <button class="small" :disabled="done.race || store.busy" @click="setPlan(d, { tyrePlan: [...customFor(d)] })">采用</button>
               </div>
@@ -240,7 +248,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
                   <span v-if="engineerSuggestions[d.driverId]?.explanation" class="tiny">{{ engineerSuggestions[d.driverId].explanation }}</span>
                   <span v-else class="tiny muted">建议质量取决于车队策略部门水平。</span>
                 </span>
-                <select v-model="engineerApi[d.driverId]" class="small" :disabled="store.busy"><option value="main">主 API</option><option value="secondary">副 API</option></select>
+                <select :value="engineerApiFor(d.driverId)" class="small" :disabled="store.busy" @change="engineerApi[d.driverId] = ($event.target as HTMLSelectElement).value as 'main' | 'secondary'"><option value="main">主 API</option><option value="secondary">副 API</option></select>
                 <button class="small" :disabled="done.race || store.busy" @click="askEngineer(d)">询问</button>
                 <button v-if="engineerSuggestions[d.driverId]?.plan" class="small primary" :disabled="done.race || store.busy" @click="applyEngineer(d)">采用</button>
               </div>

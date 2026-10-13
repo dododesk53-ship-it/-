@@ -15,6 +15,7 @@ import {
   type Outcome,
 } from './development';
 import { ferrariOnPriority } from './ferrari';
+import { teammateRelationship, willDisobeyStrategy } from './driverBehavior';
 import { addNews, driverName } from './log';
 import { offerDriverContract, offerStaffContract, releasePerson } from './market';
 import { resolveAiMarket } from './market-ai';
@@ -172,10 +173,27 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
         if (patch.energyMode && !ENERGY_MODES.includes(patch.energyMode)) return fail('未知能量模式');
         if (patch.pitTiming && !PIT_TIMINGS.includes(patch.pitTiming)) return fail('未知进站时机');
       }
+      const relationship = teammateRelationship(state, state.meta.playerTeamId);
+      const refused = new Set<string>();
+      for (const patch of action.drivers) {
+        const car = live.cars[patch.driverId];
+        const changed = (patch.paceMode !== undefined && patch.paceMode !== car.plan.paceMode) || (patch.energyMode !== undefined && patch.energyMode !== car.energyMode) || (patch.pitTiming !== undefined && patch.pitTiming !== car.plan.pitTiming);
+        const driver = state.drivers[patch.driverId];
+        if (changed && driver && willDisobeyStrategy(driver, relationship, `${live.id}:tactics:${live.revision}:${driver.id}`)) refused.add(driver.id);
+      }
       if (action.orders) { if (!validOrders(action.orders, Object.values(live.cars).filter(c => c.player && c.status === 'running').map(c => c.driverId))) return fail('无效车队指令'); live.teamOrders = { ...action.orders }; }
-      for (const patch of action.drivers) { const car = live.cars[patch.driverId]; if (patch.paceMode) car.plan.paceMode = patch.paceMode; if (patch.energyMode) car.energyMode = patch.energyMode; if (patch.pitTiming) car.plan.pitTiming = patch.pitTiming; }
+      for (const patch of action.drivers) {
+        const car = live.cars[patch.driverId];
+        if (refused.has(patch.driverId)) {
+          live.events.push({ id: `${live.id}:e${live.events.length + 1}`, lap: live.lap, type: 'order', text: `${patch.driverId} 拒绝实时策略调整`, drivers: [patch.driverId], key: true });
+          continue;
+        }
+        if (patch.paceMode) car.plan.paceMode = patch.paceMode;
+        if (patch.energyMode) car.energyMode = patch.energyMode;
+        if (patch.pitTiming) car.plan.pitTiming = patch.pitTiming;
+      }
       live.revision++;
-      return ok('实时策略已更新，将从下一圈生效');
+      return ok(refused.size ? `${[...refused].map(id => driverName(state, id)).join('、')} 拒绝调整，其余实时策略将从下一圈生效` : '实时策略已更新，将从下一圈生效');
     }
     case 'RESOLVE_RACE_DECISION':
       return resolveLiveRaceDecision(state, rng, action.sessionId, action.expectedRevision, action.windowId, action.drivers, action.orders);

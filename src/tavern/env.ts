@@ -144,7 +144,13 @@ export function createTavernEnv(): TavernEnv {
       const customApi = options?.proxyPreset
         ? { proxy_preset: options.proxyPreset, ...(options.model ? { model: options.model } : {}) }
         : undefined;
-      return String(await generateRaw({ user_input: prompt, should_stream: false, ...(customApi ? { custom_api: customApi } : {}) })).trim();
+      return String(await generateRaw({
+        user_input: prompt,
+        should_stream: false,
+        ordered_prompts: [{ role: 'system', content: prompt }, 'user_input'],
+        max_chat_history: 0,
+        ...(customApi ? { custom_api: customApi } : {}),
+      })).trim();
     },
     isGenerating: () => {
       try {

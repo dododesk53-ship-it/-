@@ -21,7 +21,7 @@ watch(activeWindowId, resetDrafts, { immediate: true });
 
 function choice(id: string) {
   const current = carById.value.get(id);
-  if (!selections[id]) selections[id] = { pit: 'auto', compound: current?.tyre ?? v.value.rules.dryCompounds[0] ?? v.value.rules.wetCompound, repairWing: false, paceMode: (current?.paceMode ?? 'balanced') as PaceMode, energyMode: (current?.energyMode ?? 'balanced') as EnergyMode, pitTiming: 'standard' };
+  if (!selections[id]) selections[id] = { pit: 'auto', compound: current?.tyre ?? v.value.rules.dryCompounds[0] ?? v.value.rules.wetCompound, repairWing: false, paceMode: (current?.paceMode ?? 'balanced') as PaceMode, energyMode: (current?.energyMode ?? 'balanced') as EnergyMode, pitTiming: (current?.pitTiming ?? 'standard') as PitTiming };
   return selections[id];
 }
 function weatherLabel() {
