@@ -4,7 +4,8 @@
 import { DEFAULT_PLAN, LABELS } from './defaults';
 import { addNarration, driverName, playerTeam } from './log';
 import { activeEntries, carRatings, fittedSpec, qualiSkill, trackScore } from './ratings';
-import type { Rng } from './rng';
+import { createPreRaceRainWindow, createWeatherTrajectory } from './raceWeather';
+import { Rng } from './rng';
 import type {
   DriverPlan,
   DriverState,
@@ -50,25 +51,27 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
   const forecastQ = clamp(track.rainChance + rng.normal(0, 0.08), 0, 1);
   const forecastR = clamp(track.rainChance + rng.normal(0, 0.08), 0, 1);
   const roll = (p: number): Weather => (rng.chance(p) ? 'wet' : 'dry');
+  // 保持原有天气抽取顺序，避免相同种子因新增预报而改变整个周末天气。
+  const practiceWeather = roll(track.rainChance);
+  const sprintQualifyingWeather = roll(forecastQ);
+  const sprintWeather = roll(forecastR);
+  const qualifyingWeather = roll(forecastQ);
   const raceWeather = roll(forecastR);
-  const rainCenter = raceWeather === 'wet'
-    ? 1
-    : Math.max(4, Math.min(track.laps - 2, Math.round(track.laps * (0.18 + (1 - forecastR) * 0.42))));
-  const raceRainWindow: [number, number] | null = raceWeather === 'wet'
-    ? [1, Math.min(4, track.laps)]
-    : forecastR >= 0.35
-      ? [Math.max(2, rainCenter - 3), Math.min(track.laps, rainCenter + 3)]
-      : null;
+  const raceWeatherSeed = rng.int(0, 0xffffffff);
+  const hiddenRaceTrajectory = createWeatherTrajectory(track.laps, raceWeather === 'wet', track.rainChance, new Rng(raceWeatherSeed));
+  const forecastNoise = new Rng(rng.int(0, 0xffffffff));
+  const raceRainWindow = createPreRaceRainWindow(hiddenRaceTrajectory, forecastR, state.teams[state.meta.playerTeamId].staff.strategist.skill, forecastNoise);
   const weekend: WeekendState = {
     roundIndex: state.season.roundIndex,
     weather: {
-      practice: roll(track.rainChance),
-      sprintQualifying: roll(forecastQ),
-      sprint: roll(forecastR),
-      qualifying: roll(forecastQ),
+      practice: practiceWeather,
+      sprintQualifying: sprintQualifyingWeather,
+      sprint: sprintWeather,
+      qualifying: qualifyingWeather,
       race: raceWeather,
     },
     forecast: { qualifying: round3(forecastQ), race: round3(forecastR), raceRainWindow },
+    raceWeatherSeed,
     setup: {},
     plans: {},
     teamOrders: prev?.teamOrders ? deepClone(prev.teamOrders) : { mode: 'free', favorDriverId: null },

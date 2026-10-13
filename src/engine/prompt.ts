@@ -56,7 +56,7 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
     const rw = revealedWeather(w, phase, true);
     const weatherBits = [
       rw.qualifying ? `排位${LABELS.weather[rw.qualifying]}` : `排位降雨概率 ${pct(w.forecast.qualifying)}`,
-      rw.race ? `正赛${LABELS.weather[rw.race]}` : `正赛降雨概率 ${pct(w.forecast.race)}`,
+      rw.race ? `正赛${LABELS.weather[rw.race]}` : `正赛降雨概率 ${pct(w.forecast.race)}${w.forecast.raceRainWindow ? `，预计第 ${w.forecast.raceRainWindow[0]}–${w.forecast.raceRainWindow[1]} 圈可能降雨` : ''}`,
     ];
     L.push(`天气：${weatherBits.join('，')}`);
     const live = w.liveRace;

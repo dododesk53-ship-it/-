@@ -840,6 +840,8 @@ export interface WeekendState {
     /** 公开的赛前降雨到达窗口；预报可以与隐藏天气轨迹有偏差。 */
     raceRainWindow?: [number, number] | null;
   };
+  /** 仅供引擎复现隐藏正赛天气轨迹；不得进入公开视图或提示词。 */
+  raceWeatherSeed?: number;
   setup: Record<string, SetupState>;
   plans: Record<string, DriverPlan>;
   teamOrders: TeamOrders;

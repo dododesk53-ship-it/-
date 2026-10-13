@@ -3,7 +3,7 @@ import { act, advanceUntil, newTestGame, tryAct } from '../helpers';
 import { buildView } from '../../src/engine/view';
 import { buildStatePrompt } from '../../src/engine/prompt';
 import { Rng } from '../../src/engine/rng';
-import { createForecast } from '../../src/engine/raceWeather';
+import { createForecast, createWeatherTrajectory } from '../../src/engine/raceWeather';
 import { migrateState } from '../../src/engine/migrate';
 import { teammateRelationship, willDisobeyStrategy } from '../../src/engine/driverBehavior';
 
@@ -29,6 +29,16 @@ describe('resumable live race', () => {
     expect(prompt).toContain('实时比赛');
     expect(prompt).not.toContain('weatherTrajectory');
     expect(prompt).not.toContain(String(live.rngState));
+  });
+
+  it('uses the weekend hidden weather seed without exposing it in the public view', () => {
+    const ready = raceReady(321);
+    const track = ready.tracks[ready.calendar[ready.season.roundIndex].trackId];
+    const seed = ready.weekend!.raceWeatherSeed!;
+    const expected = createWeatherTrajectory(track.laps, ready.weekend!.weather.race === 'wet', track.rainChance, new Rng(seed));
+    const started = act(ready, { type: 'START_RACE', kind: 'race' });
+    expect(started.weekend!.liveRace!.weatherTrajectory).toEqual(expected);
+    expect(JSON.stringify(buildView(started).weekend)).not.toContain('raceWeatherSeed');
   });
 
   it('rejects stale windows atomically and accepts a two-car grid decision', () => {

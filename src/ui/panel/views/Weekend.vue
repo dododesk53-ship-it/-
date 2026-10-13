@@ -249,7 +249,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
                   <b class="small">车队工程师建议</b>
                   <span v-if="engineerSuggestions[d.driverId]?.explanation" class="tiny">{{ engineerSuggestions[d.driverId].explanation }}</span>
                   <span v-if="engineerSuggestions[d.driverId]?.weatherResponse" class="tiny muted">{{ engineerSuggestions[d.driverId].weatherResponse }}</span>
-                  <span v-else class="tiny muted">建议质量取决于车队策略部门水平。</span>
+                  <span v-if="!engineerSuggestions[d.driverId]?.explanation && !engineerSuggestions[d.driverId]?.weatherResponse" class="tiny muted">建议质量取决于车队策略部门水平。</span>
                 </span>
                 <select :value="engineerApiFor(d.driverId)" class="small" :disabled="store.busy" @change="engineerApi[d.driverId] = ($event.target as HTMLSelectElement).value as 'main' | 'secondary'"><option value="main">主 API</option><option value="secondary">副 API</option></select>
                 <button class="small" :disabled="done.race || store.busy" @click="askEngineer(d)">询问</button>

@@ -580,7 +580,8 @@ export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sp
   const rules = state.rules;
   const totalLaps = kind === 'sprint' ? Math.max(3, Math.round(track.laps * rules.sprintLapsFactor)) : track.laps;
   const execution = new Rng((rng.next() * 0x100000000) >>> 0);
-  const weatherRng = new Rng((rng.next() * 0x100000000) >>> 0);
+  const randomWeatherSeed = (rng.next() * 0x100000000) >>> 0;
+  const weatherRng = new Rng(kind === 'race' && w.raceWeatherSeed !== undefined ? w.raceWeatherSeed : randomWeatherSeed);
   const forecastRng = new Rng((rng.next() * 0x100000000) >>> 0);
   const quali = kind === 'sprint' ? w.sprintQualifying : w.qualifying;
   const entries = activeEntries(state);

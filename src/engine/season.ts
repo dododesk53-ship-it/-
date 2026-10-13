@@ -102,7 +102,7 @@ export function startWeekend(state: GameState, rng: Rng): Outcome {
     state,
     'weekend_start',
     `${track.name} 比赛周末开始`,
-    `车队来到 ${track.name}（${track.type}，${track.laps} 圈）。天气预报：排位赛降雨概率 ${Math.round(w.forecast.qualifying * 100)}%，正赛降雨概率 ${Math.round(w.forecast.race * 100)}%。${currentRound(state)?.sprint ? '本站是冲刺赛周末。' : ''}`,
+    `车队来到 ${track.name}（${track.type}，${track.laps} 圈）。天气预报：排位赛降雨概率 ${Math.round(w.forecast.qualifying * 100)}%，正赛降雨概率 ${Math.round(w.forecast.race * 100)}%${w.forecast.raceRainWindow ? `，预计第 ${w.forecast.raceRainWindow[0]}–${w.forecast.raceRainWindow[1]} 圈可能降雨` : ''}。${currentRound(state)?.sprint ? '本站是冲刺赛周末。' : ''}`,
   );
   return ok(`进入 ${track.name} 比赛周末`);
 }

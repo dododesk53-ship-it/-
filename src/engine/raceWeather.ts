@@ -17,6 +17,31 @@ export function createWeatherTrajectory(totalLaps: number, startsWet: boolean, r
   return path;
 }
 
+/**
+ * 赛前公开降雨窗口。它参考隐藏轨迹，但加入漏报、误报和到达时间误差，
+ * 因此不会把真实天气轨迹直接暴露给玩家。
+ */
+export function createPreRaceRainWindow(
+  trajectory: number[],
+  rainChance: number,
+  strategistSkill: number,
+  rng: Rng,
+): [number, number] | null {
+  const actual = trajectory.findIndex(value => value > 0.16);
+  const uncertainty = Math.max(2, Math.round(7 - strategistSkill / 20));
+  const missesActual = actual >= 0 && rng.chance(Math.max(0.08, 0.28 - strategistSkill / 500));
+  const falsePositive = actual < 0 && rng.chance(0.08 + rainChance * 0.45);
+  if ((actual < 0 && !falsePositive) || missesActual) return null;
+  const center = actual >= 0
+    ? actual + 1 + Math.round(rng.normal(0, uncertainty))
+    : rng.int(1, Math.max(1, trajectory.length));
+  const halfWidth = Math.max(2, uncertainty);
+  return [
+    Math.max(1, Math.min(trajectory.length, center - halfWidth)),
+    Math.max(1, Math.min(trajectory.length, center + halfWidth)),
+  ];
+}
+
 export function nextWetness(previous: number, rain: number): number {
   // Rain accumulation, drainage, evaporation and racing line drying are intentionally gradual.
   return clamp(previous + rain * 0.23 - (rain > 0.08 ? 0.015 : 0.075), 0, 1);

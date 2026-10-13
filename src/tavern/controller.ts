@@ -514,8 +514,9 @@ export class F1Controller {
     const midfield = !['red_bull', 'mercedes', 'mclaren', 'aston_martin', 'ferrari'].includes(team.id);
     const level = team.id === 'red_bull' ? 0 : team.id === 'mercedes' ? 1 : midfield ? 2 : team.id === 'mclaren' ? 3 : team.id === 'aston_martin' ? 4 : 5;
     const labels = ['顶级', '优秀', '中游', '保守迟钝', '较差', '灾难级'];
-    const liveCar = state.weekend.liveRace?.cars[driverId];
-    const qualifyingGrid = state.weekend.qualifying?.grid ?? [];
+    const liveCar = state.weekend.liveRace?.kind === 'race' ? state.weekend.liveRace.cars[driverId] : undefined;
+    const activeDriverIds = new Set(Object.values(state.teams).flatMap(currentTeam => currentTeam.cars.map(car => car.driverId).filter((id): id is string => !!id)));
+    const qualifyingGrid = (state.weekend.qualifying?.grid ?? []).filter(id => activeDriverIds.has(id));
     const gridPosition = liveCar?.grid ?? (qualifyingGrid.includes(driverId) ? qualifyingGrid.indexOf(driverId) + 1 : null);
     const rainWindow = state.weekend.forecast.raceRainWindow ?? null;
     const rainTarget = rainWindow ? (rainWindow[0] + rainWindow[1]) / 2 : null;
@@ -524,7 +525,7 @@ export class F1Controller {
         if (rainTarget === null) return option.cost;
         const stopsBeforeRain = option.stints.slice(0, -1).reduce<{ laps: number; count: number }>((acc, laps) => ({ laps: acc.laps + laps, count: acc.count + (acc.laps + laps < rainTarget ? 1 : 0) }), { laps: 0, count: 0 }).count;
         const frontPenalty = gridPosition !== null && gridPosition <= 5 && option.stints[0] < rainTarget ? 4 : 0;
-        return option.cost + stopsBeforeRain * 12 + Math.abs(option.stints[0] - rainTarget) * 0.8 + frontPenalty;
+        return option.cost + stopsBeforeRain * 12 + frontPenalty;
       };
       return score(a) - score(b);
     });
@@ -540,9 +541,11 @@ export class F1Controller {
     const compounds = option.compounds.map(compound => state.rules.tyres[compound]?.name ?? compound).join(' → ');
     const gridContext = gridPosition === null ? '发车位尚未确定' : `从 P${gridPosition} 发车`;
     const weatherResponse = rainWindow
-      ? `公开预报显示第 ${rainWindow[0]}–${rainWindow[1]} 圈可能降雨；先用 ${state.rules.tyres[option.compounds[0]]?.name ?? option.compounds[0]}，赛道转湿时准备换半雨胎，避免在降雨前多做一次干胎进站`
-      : state.weekend.weather.race === 'wet'
-        ? '正赛预计湿地起步，使用雨胎并按赛道积水调整'
+      ? rainWindow[0] <= 2
+        ? `公开预报显示开局阶段可能降雨；发车前确认赛道，若已湿则直接使用半雨胎，若仍干燥则用 ${state.rules.tyres[option.compounds[0]]?.name ?? option.compounds[0]}短跑，赛道转湿后立即换半雨胎`
+        : `公开预报显示第 ${rainWindow[0]}–${rainWindow[1]} 圈可能降雨；先用 ${state.rules.tyres[option.compounds[0]]?.name ?? option.compounds[0]}，赛道转湿时准备换半雨胎，避免在降雨前多做一次干胎进站`
+      : state.weekend.forecast.race >= 0.55
+        ? '公开预报存在降雨风险，但到达时间不明确；按干地方案起步并保留雨胎应急窗口'
         : '目前没有明确降雨窗口，按干地基础方案执行';
     const prompt = [
       '你是 F1 车队策略工程师。请用中文给领队一段简短、自然的策略建议。',
