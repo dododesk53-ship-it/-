@@ -248,7 +248,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
                 <span class="grow stack-s">
                   <b class="small">车队工程师建议</b>
                   <span v-if="engineerSuggestions[d.driverId]?.explanation" class="tiny">{{ engineerSuggestions[d.driverId].explanation }}</span>
-                  <span v-if="engineerSuggestions[d.driverId]?.weatherResponse" class="tiny muted">{{ engineerSuggestions[d.driverId].weatherResponse }}</span>
+                  <span v-if="engineerSuggestions[d.driverId]?.weatherResponse && !engineerSuggestions[d.driverId]?.explanation?.includes(engineerSuggestions[d.driverId].weatherResponse!)" class="tiny muted">{{ engineerSuggestions[d.driverId].weatherResponse }}</span>
                   <span v-if="!engineerSuggestions[d.driverId]?.explanation && !engineerSuggestions[d.driverId]?.weatherResponse" class="tiny muted">建议质量取决于车队策略部门水平。</span>
                 </span>
                 <span class="engineer-actions">
