@@ -12,6 +12,7 @@ describe('赛前公开降雨窗口', () => {
     expect(first![0]).toBeGreaterThanOrEqual(1);
     expect(first![1]).toBeLessThanOrEqual(trajectory.length);
     expect(first![0]).toBeLessThanOrEqual(first![1]);
+    expect(first![1]).toBeGreaterThan(first![0]);
   });
 
   it('允许无雨轨迹没有公开降雨窗口', () => {

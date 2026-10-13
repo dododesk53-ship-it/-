@@ -32,9 +32,10 @@ export function createPreRaceRainWindow(
   const missesActual = actual >= 0 && rng.chance(Math.max(0.08, 0.28 - strategistSkill / 500));
   const falsePositive = actual < 0 && rng.chance(0.08 + rainChance * 0.45);
   if ((actual < 0 && !falsePositive) || missesActual) return null;
-  const center = actual >= 0
+  const noisyCenter = actual >= 0
     ? actual + 1 + Math.round(rng.normal(0, uncertainty))
     : rng.int(1, Math.max(1, trajectory.length));
+  const center = Math.max(1, Math.min(trajectory.length, noisyCenter));
   const halfWidth = Math.max(2, uncertainty);
   return [
     Math.max(1, Math.min(trajectory.length, center - halfWidth)),
