@@ -243,7 +243,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
                 </span>
                 <button class="small" :disabled="done.race || store.busy" @click="setPlan(d, { tyrePlan: [...customFor(d)] })">采用</button>
               </div>
-              <div class="plan" :class="{ on: engineerSuggestions[d.driverId]?.plan?.tyrePlan && planIs(d, engineerSuggestions[d.driverId].plan!.tyrePlan as string[]) }">
+              <div class="plan engineer-plan" :class="{ on: engineerSuggestions[d.driverId]?.plan?.tyrePlan && planIs(d, engineerSuggestions[d.driverId].plan!.tyrePlan as string[]) }">
                 <span class="badge">4</span>
                 <span class="grow stack-s">
                   <b class="small">车队工程师建议</b>
@@ -251,9 +251,11 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
                   <span v-if="engineerSuggestions[d.driverId]?.weatherResponse" class="tiny muted">{{ engineerSuggestions[d.driverId].weatherResponse }}</span>
                   <span v-if="!engineerSuggestions[d.driverId]?.explanation && !engineerSuggestions[d.driverId]?.weatherResponse" class="tiny muted">建议质量取决于车队策略部门水平。</span>
                 </span>
-                <select :value="engineerApiFor(d.driverId)" class="small" :disabled="store.busy" @change="engineerApi[d.driverId] = ($event.target as HTMLSelectElement).value as 'main' | 'secondary'"><option value="main">主 API</option><option value="secondary">副 API</option></select>
-                <button class="small" :disabled="done.race || store.busy" @click="askEngineer(d)">询问</button>
-                <button v-if="engineerSuggestions[d.driverId]?.plan" class="small primary" :disabled="done.race || store.busy" @click="applyEngineer(d)">采用</button>
+                <span class="engineer-actions">
+                  <select :value="engineerApiFor(d.driverId)" class="small" :disabled="store.busy" @change="engineerApi[d.driverId] = ($event.target as HTMLSelectElement).value as 'main' | 'secondary'"><option value="main">主 API</option><option value="secondary">副 API</option></select>
+                  <button class="small" :disabled="done.race || store.busy" @click="askEngineer(d)">询问</button>
+                  <button v-if="engineerSuggestions[d.driverId]?.plan" class="small primary" :disabled="done.race || store.busy" @click="applyEngineer(d)">采用</button>
+                </span>
               </div>
             </div>
             <div class="tiny muted row">
@@ -452,6 +454,18 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
 }
 .plan input {
   accent-color: var(--team);
+}
+.engineer-plan {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+.engineer-actions {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
 }
 .events {
   max-height: 260px;

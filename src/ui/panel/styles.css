@@ -357,3 +357,9 @@ html.f1m-mobile .race-actions {
   gap: 6px;
 }
 html.f1m-mobile .race-actions button { min-width: 0; }
+/* The iframe keeps a desktop CSS viewport in some embedded hosts. Mirror the
+   host's narrow mode for layouts that otherwise rely on media queries. */
+html.f1m-mobile .broadcast-shell { flex-direction: column; }
+html.f1m-mobile .timing { width: 100%; flex: none; }
+html.f1m-mobile .g2,
+html.f1m-mobile .g3 { grid-template-columns: 1fr; }
