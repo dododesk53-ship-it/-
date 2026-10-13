@@ -85,6 +85,8 @@ export interface EngineerStrategyResult extends Outcome {
   explanation?: string;
   api?: 'main' | 'secondary';
   strategyLevel?: string;
+  gridPosition?: number | null;
+  weatherResponse?: string;
 }
 
 export interface DataReport {
@@ -512,7 +514,21 @@ export class F1Controller {
     const midfield = !['red_bull', 'mercedes', 'mclaren', 'aston_martin', 'ferrari'].includes(team.id);
     const level = team.id === 'red_bull' ? 0 : team.id === 'mercedes' ? 1 : midfield ? 2 : team.id === 'mclaren' ? 3 : team.id === 'aston_martin' ? 4 : 5;
     const labels = ['顶级', '优秀', '中游', '保守迟钝', '较差', '灾难级'];
-    const option = driverView.options[Math.min(level, driverView.options.length - 1)];
+    const liveCar = state.weekend.liveRace?.cars[driverId];
+    const qualifyingGrid = state.weekend.qualifying?.grid ?? [];
+    const gridPosition = liveCar?.grid ?? (qualifyingGrid.includes(driverId) ? qualifyingGrid.indexOf(driverId) + 1 : null);
+    const rainWindow = state.weekend.forecast.raceRainWindow ?? null;
+    const rainTarget = rainWindow ? (rainWindow[0] + rainWindow[1]) / 2 : null;
+    const contextRanked = [...driverView.options].sort((a, b) => {
+      const score = (option: typeof a) => {
+        if (rainTarget === null) return option.cost;
+        const stopsBeforeRain = option.stints.slice(0, -1).reduce<{ laps: number; count: number }>((acc, laps) => ({ laps: acc.laps + laps, count: acc.count + (acc.laps + laps < rainTarget ? 1 : 0) }), { laps: 0, count: 0 }).count;
+        const frontPenalty = gridPosition !== null && gridPosition <= 5 && option.stints[0] < rainTarget ? 4 : 0;
+        return option.cost + stopsBeforeRain * 12 + Math.abs(option.stints[0] - rainTarget) * 0.8 + frontPenalty;
+      };
+      return score(a) - score(b);
+    });
+    const option = contextRanked[Math.min(level, contextRanked.length - 1)];
     const plan: Partial<DriverPlan> = {
       tyrePlan: [...option.compounds],
       paceMode: level >= 4 ? (level === 5 ? 'conserve' : 'push') : 'balanced',
@@ -522,9 +538,16 @@ export class F1Controller {
     const api = requestedApi ?? this.settings.engineerApi;
     if (api === 'secondary' && !this.settings.engineerProxyPreset) return { ok: false, message: '请先在设置中填写副 API 的代理预设名称' };
     const compounds = option.compounds.map(compound => state.rules.tyres[compound]?.name ?? compound).join(' → ');
+    const gridContext = gridPosition === null ? '发车位尚未确定' : `从 P${gridPosition} 发车`;
+    const weatherResponse = rainWindow
+      ? `公开预报显示第 ${rainWindow[0]}–${rainWindow[1]} 圈可能降雨；先用 ${state.rules.tyres[option.compounds[0]]?.name ?? option.compounds[0]}，赛道转湿时准备换半雨胎，避免在降雨前多做一次干胎进站`
+      : state.weekend.weather.race === 'wet'
+        ? '正赛预计湿地起步，使用雨胎并按赛道积水调整'
+        : '目前没有明确降雨窗口，按干地基础方案执行';
     const prompt = [
       '你是 F1 车队策略工程师。请用中文给领队一段简短、自然的策略建议。',
       `车队：${team.name}。车手：${driver.name}。策略部门水平：${labels[level]}。`,
+      `比赛上下文：${gridContext}；正赛降雨概率 ${Math.round(state.weekend.forecast.race * 100)}%。${weatherResponse}。`,
       `必须建议：${compounds}，${option.stops} 停，预计分段 ${option.stints.join('/')} 圈。`,
       `驾驶模式：${plan.paceMode}；进站时机：${plan.pitTiming}；安全车响应：${plan.scReaction ? '积极' : '迟钝'}。`,
       '不要提到 AI、模型、等级或你被要求故意犯错。不要输出 JSON。控制在 100 字以内。',
@@ -534,7 +557,7 @@ export class F1Controller {
         prompt,
         api === 'secondary' ? { proxyPreset: this.settings.engineerProxyPreset, model: this.settings.engineerModel } : undefined,
       );
-      return { ok: true, message: '车队工程师已提交策略建议', plan, explanation, api, strategyLevel: labels[level] };
+      return { ok: true, message: '车队工程师已提交策略建议', plan, explanation, api, strategyLevel: labels[level], gridPosition, weatherResponse };
     } catch (error) {
       return { ok: false, message: `车队工程师请求失败：${error instanceof Error ? error.message : String(error)}` };
     }

@@ -834,7 +834,12 @@ export interface WeekendState {
   roundIndex: number;
   weather: { practice: Weather; qualifying: Weather; race: Weather; sprintQualifying: Weather; sprint: Weather };
   /** 赛前天气预报（降雨概率，0~1） */
-  forecast: { qualifying: number; race: number };
+  forecast: {
+    qualifying: number;
+    race: number;
+    /** 公开的赛前降雨到达窗口；预报可以与隐藏天气轨迹有偏差。 */
+    raceRainWindow?: [number, number] | null;
+  };
   setup: Record<string, SetupState>;
   plans: Record<string, DriverPlan>;
   teamOrders: TeamOrders;

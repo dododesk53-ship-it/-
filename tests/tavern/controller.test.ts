@@ -64,6 +64,28 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(secondary.ok).toBe(true);
     expect(secondary.api).toBe('secondary');
     expect(env.generated.at(-1)?.options).toEqual({ proxyPreset: '策略副线', model: 'test-model' });
+
+    const contextual = ctrl.stateAt()!;
+    contextual.weekend!.forecast.race = 0.72;
+    contextual.weekend!.forecast.raceRainWindow = [10, 14];
+    contextual.weekend!.weather.race = 'dry';
+    contextual.weekend!.qualifying = {
+      kind: 'qualifying',
+      weather: 'dry',
+      sessions: [],
+      order: ['a1', 'c1'],
+      grid: ['a1', 'c1'],
+      pole: null,
+      events: [],
+    };
+    expect((await ctrl.importSave(JSON.stringify(contextual))).ok).toBe(true);
+    const weatherAware = await ctrl.requestEngineerStrategy('c1', 'main');
+    expect(weatherAware.ok).toBe(true);
+    expect(weatherAware.gridPosition).toBe(2);
+    expect(weatherAware.weatherResponse).toContain('第 10–14 圈可能降雨');
+    expect(env.generated.at(-1)?.prompt).toContain('从 P2 发车');
+    expect(env.generated.at(-1)?.prompt).toContain('正赛降雨概率 72%');
+    expect(env.generated.at(-1)?.prompt).toContain('换半雨胎');
   });
 
   it('生成前注入实时数据提示词', async () => {

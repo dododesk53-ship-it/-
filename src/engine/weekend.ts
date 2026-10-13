@@ -50,6 +50,15 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
   const forecastQ = clamp(track.rainChance + rng.normal(0, 0.08), 0, 1);
   const forecastR = clamp(track.rainChance + rng.normal(0, 0.08), 0, 1);
   const roll = (p: number): Weather => (rng.chance(p) ? 'wet' : 'dry');
+  const raceWeather = roll(forecastR);
+  const rainCenter = raceWeather === 'wet'
+    ? 1
+    : Math.max(4, Math.min(track.laps - 2, Math.round(track.laps * (0.18 + (1 - forecastR) * 0.42))));
+  const raceRainWindow: [number, number] | null = raceWeather === 'wet'
+    ? [1, Math.min(4, track.laps)]
+    : forecastR >= 0.35
+      ? [Math.max(2, rainCenter - 3), Math.min(track.laps, rainCenter + 3)]
+      : null;
   const weekend: WeekendState = {
     roundIndex: state.season.roundIndex,
     weather: {
@@ -57,9 +66,9 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
       sprintQualifying: roll(forecastQ),
       sprint: roll(forecastR),
       qualifying: roll(forecastQ),
-      race: roll(forecastR),
+      race: raceWeather,
     },
-    forecast: { qualifying: round3(forecastQ), race: round3(forecastR) },
+    forecast: { qualifying: round3(forecastQ), race: round3(forecastR), raceRainWindow },
     setup: {},
     plans: {},
     teamOrders: prev?.teamOrders ? deepClone(prev.teamOrders) : { mode: 'free', favorDriverId: null },

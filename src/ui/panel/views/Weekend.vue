@@ -159,6 +159,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
             天气：练习 {{ weatherText(w.weather.practice) }} ·
             <template v-if="isSprint">冲刺排位 {{ weatherText(w.weather.sprintQualifying, w.forecast.qualifying) }} · 冲刺赛 {{ weatherText(w.weather.sprint, w.forecast.race) }} · </template>
             排位 {{ weatherText(w.weather.qualifying, w.forecast.qualifying) }} · 正赛 {{ weatherText(w.weather.race, w.forecast.race) }}
+            <span v-if="w.forecast.raceRainWindow"> · 预计第 {{ w.forecast.raceRainWindow[0] }}–{{ w.forecast.raceRainWindow[1] }} 圈可能降雨</span>
           </template>
           <template v-else-if="phase === 'pre_race' || phase === 'preseason'">还没进入本站比赛周末。工厂周可以先安排研发、装件和训练。</template>
           <template v-else-if="phase === 'season_end'">赛季已结束。</template>
@@ -247,6 +248,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
                 <span class="grow stack-s">
                   <b class="small">车队工程师建议</b>
                   <span v-if="engineerSuggestions[d.driverId]?.explanation" class="tiny">{{ engineerSuggestions[d.driverId].explanation }}</span>
+                  <span v-if="engineerSuggestions[d.driverId]?.weatherResponse" class="tiny muted">{{ engineerSuggestions[d.driverId].weatherResponse }}</span>
                   <span v-else class="tiny muted">建议质量取决于车队策略部门水平。</span>
                 </span>
                 <select :value="engineerApiFor(d.driverId)" class="small" :disabled="store.busy" @change="engineerApi[d.driverId] = ($event.target as HTMLSelectElement).value as 'main' | 'secondary'"><option value="main">主 API</option><option value="secondary">副 API</option></select>
