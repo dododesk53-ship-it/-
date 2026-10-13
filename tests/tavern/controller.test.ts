@@ -104,6 +104,18 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(legacyForecast.weatherResponse).toBe('目前没有明确降雨窗口，按干地基础方案执行');
   });
 
+  it('工程师 API 失败时仍自动应用基础策略', async () => {
+    for (let i = 0; i < 30 && !ctrl.stateAt()!.weekend; i++) expect((await ctrl.dispatch({ type: 'ADVANCE' })).ok).toBe(true);
+    env.generateText = async () => { throw new Error('测试超时'); };
+    const result = await ctrl.requestEngineerStrategy('c1');
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain('基础策略已自动应用并执行');
+    expect(result.explanation).toContain('干地基础方案');
+    const saved = ctrl.stateAt()!.weekend!.plans.c1;
+    expect(saved.strategySource).toBe('engineer');
+    expect(saved.tyrePlan).toEqual(result.plan?.tyrePlan);
+  });
+
   it('生成前注入实时数据提示词', async () => {
     await env.userSays('你好');
     await env.fire(env.events.GENERATION_AFTER_COMMANDS, 'normal', {}, false);

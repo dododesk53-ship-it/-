@@ -11,6 +11,7 @@ describe('strategy mode interface', () => {
     expect(weekend).toContain('听工程师');
     expect(weekend).not.toContain('d.options.slice(0, 2)');
     expect(weekend).not.toContain('车队工程师建议');
+    expect(weekend).toContain("strategySource: 'player', tyrePlan: [...customFor(d)], paceMode: 'balanced', pitTiming: 'standard', scReaction: true");
   });
 
   it('shows the reliability warning on new-game and strategy screens', () => {

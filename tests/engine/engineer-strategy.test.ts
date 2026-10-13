@@ -20,6 +20,14 @@ describe('engineer strategy execution', () => {
     for (let i = 0; i < 10; i++) expect(engineerDecisionRoll(session, car, 'wet-dry-tyre', .55)).toBe(first);
   });
 
+  it('mixes the private weather seed and rain-spell key into deterministic decisions', () => {
+    const car = { driverId: 'driver-test' };
+    const seeded = new Set(Array.from({ length: 32 }, (_, weatherRngState) => engineerDecisionRoll({ id: 'race-test', weatherRngState }, car, 'wet-dry-tyre:0', .55)));
+    const spells = new Set(Array.from({ length: 32 }, (_, spell) => engineerDecisionRoll({ id: 'race-test', weatherRngState: 7190 }, car, `wet-dry-tyre:${spell}`, .55)));
+    expect(seeded).toEqual(new Set([true, false]));
+    expect(spells).toEqual(new Set([true, false]));
+  });
+
   it('skips player decision windows when both drivers listen to engineers', () => {
     let state = advanceUntil(newTestGame(7190), current => current.season.phase === 'race');
     const driverIds = Object.values(state.drivers).filter(driver => driver.teamId === state.meta.playerTeamId).map(driver => driver.id);
@@ -39,5 +47,24 @@ describe('engineer strategy execution', () => {
     const finished = act(state, { type: 'RUN_RACE' });
     expect(finished.weekend!.race).not.toBeNull();
     expect(finished.weekend!.liveRace).toBeNull();
+  });
+
+  it('does not create engineer weather events for a retired car', () => {
+    let state = advanceUntil(newTestGame(7192), current => current.season.phase === 'race');
+    state.teams[state.meta.playerTeamId].name = '法拉利';
+    const driverIds = Object.values(state.drivers).filter(driver => driver.teamId === state.meta.playerTeamId).map(driver => driver.id);
+    for (const driverId of driverIds) state = act(state, { type: 'SET_PLAN', driverId, plan: { strategySource: 'engineer' } });
+    state = act(state, { type: 'START_RACE', kind: 'race' });
+    const live = state.weekend!.liveRace!;
+    live.cars[driverIds[0]].status = 'dnf';
+    live.cars[driverIds[0]].reason = 'test';
+    live.wetness = .29;
+    live.surface = 'damp';
+    live.weatherTrajectory[0] = 1;
+    let matchingSeed = 0;
+    while (!engineerDecisionRoll({ id: live.id, weatherRngState: matchingSeed }, { driverId: driverIds[0] }, 'wet-dry-tyre:0', .55)) matchingSeed++;
+    live.weatherRngState = matchingSeed;
+    state = act(state, { type: 'ADVANCE_RACE', sessionId: live.id, expectedRevision: live.revision, until: 'next_lap' });
+    expect(state.weekend!.liveRace!.events.some(event => event.drivers.includes(driverIds[0]) && event.text.includes('工程师误判'))).toBe(false);
   });
 });
