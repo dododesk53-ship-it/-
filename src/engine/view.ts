@@ -24,6 +24,7 @@ import {
 } from './development';
 import { annualSalaries, capRemaining, costCapOf } from './finance';
 import { fanCamps, fanGap } from './ferrari';
+import { teammateRelationship } from './driverBehavior';
 import { describeLog } from './protocol';
 import { carRatings, disclosedPerf, driverOverall, findSpec, moraleLabel, teamPaceRanking, trackScore, type CarRatings } from './ratings';
 import { nextActionFor, sortedDrivers, sortedTeams, type NextAction } from './season';
@@ -222,6 +223,8 @@ export interface WeekendView {
   forecast: WeekendState['forecast'];
   parcFerme: boolean;
   teamOrders: WeekendState['teamOrders'];
+  /** 由两位车手当前信任、心态与自尊推算。 */
+  teammateRelationship: number;
   penalties: Record<string, number>;
   drivers: WeekendDriverView[];
   practice: PracticeResult | null;
@@ -716,6 +719,7 @@ function buildWeekendView(state: GameState): WeekendView | null {
     forecast: w.forecast,
     parcFerme: w.parcFerme,
     teamOrders: w.teamOrders,
+    teammateRelationship: teammateRelationship(state, team.id),
     penalties: w.penalties,
     drivers,
     practice: w.practice,

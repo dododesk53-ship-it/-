@@ -6,6 +6,7 @@
  * 安全车/虚拟安全车。最终产出成绩表、关键事件、车手走势。
  */
 import { DEFAULT_PLAN } from './defaults';
+import { strategyDisobedienceChance, teammateRelationship } from './driverBehavior';
 import { driverName } from './log';
 import { activeEntries, carRatings, fittedSpec, raceSkill, trackScore } from './ratings';
 import { Rng } from './rng';
@@ -591,10 +592,17 @@ export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sp
   const trajectory = createWeatherTrajectory(totalLaps, startsWet, track.rainChance, weatherRng);
   const cars: Record<string, LiveRaceCar> = {};
   const lapChart: Record<string, number[]> = {};
+  const disobedient: string[] = [];
+  const playerRelationship = teammateRelationship(state, state.meta.playerTeamId);
   for (const [index, id] of grid.entries()) {
     const entry = entries.find(e => e.driver.id === id)!;
     const ratings = carRatings(entry.team, entry.car, rules);
-    const plan = entry.team.isPlayer ? { ...planOf(state, id) } : { ...DEFAULT_PLAN };
+    let plan = entry.team.isPlayer ? { ...planOf(state, id) } : { ...DEFAULT_PLAN };
+    const instructed = entry.team.isPlayer && (plan.tyrePlan !== 'auto' || plan.paceMode !== 'balanced' || plan.pitTiming !== 'standard');
+    if (instructed && execution.chance(strategyDisobedienceChance(entry.driver, playerRelationship))) {
+      plan = { ...plan, tyrePlan: 'auto', paceMode: 'balanced', pitTiming: 'standard' };
+      disobedient.push(id);
+    }
     const setup = w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 };
     const wet = trajectory[0] > 0.18;
     const compounds = wet
@@ -626,6 +634,7 @@ export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sp
     scLeft: 0, vscLeft: 0, safetyCars: 0, fastestLap: null, events: [], lapChart, orderOutcomes: [], orderCooldown: {},
     teamOrders: { ...w.teamOrders }, pendingDecision: null, damageLedger: [],
   };
+  for (const driverId of disobedient) liveEvent(session, 0, 'order', `${driverId} 拒绝执行赛前策略，决定按自己的节奏比赛`, [driverId], true);
   session.weatherRngState = weatherRng.state;
   session.forecastRngState = forecastRng.state;
   session.pendingDecision = { id: `${session.id}:w1`, lap: 0, stage: 'grid', reasons: ['grid'], affectedDriverIds: playerCars(session).map(c => c.driverId), eligibleDriverIds: playerCars(session).map(c => c.driverId), observedEventIds: [] };
@@ -796,7 +805,9 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
       const key = mate && favored ? `${mate.driverId}>${favored.driverId}` : '';
       const close = mate && favored && mate.player && mate.teamId === favored.teamId && mate.status === 'running' && favored.status === 'running' && favored.cumulativeTime - mate.cumulativeTime < 2.2;
       if (close && mate && favored && (session.orderCooldown[key] ?? 0) <= lap) {
-        const compliance = clamp(.25 + mate.trust / 150 - mate.ego / 220 + (favored.racecraft - mate.racecraft) / 500, .08, .92);
+        const driver = state.drivers[mate.driverId];
+        const relationship = teammateRelationship(state, mate.teamId);
+        const compliance = driver ? 1 - strategyDisobedienceChance(driver, relationship) : .98;
         const complied = rng.chance(compliance);
         session.orderCooldown[key] = lap + 8;
         session.orderOutcomes.push({ lap, yielded: mate.driverId, favored: favored.driverId, complied });
@@ -847,8 +858,23 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
     seen.add(choice.driverId);
   }
   if (!validOrders(orders, playerIds)) return false;
+  const decisionRng = Rng.restore(session.rngState);
+  const relationship = teammateRelationship(state, state.meta.playerTeamId);
+  const ignored = new Set<string>();
+  for (const choice of drivers) {
+    const driver = state.drivers[choice.driverId];
+    const isInstruction = choice.pit !== 'auto' || !!choice.repairWing || !!choice.paceMode || !!choice.energyMode || !!choice.pitTiming;
+    if (driver && isInstruction && decisionRng.chance(strategyDisobedienceChance(driver, relationship))) ignored.add(choice.driverId);
+  }
+  session.rngState = decisionRng.state;
   for (const choice of drivers) {
     const car = session.cars[choice.driverId];
+    if (ignored.has(choice.driverId)) {
+      car.pendingPit = 'auto';
+      car.pendingCompound = null;
+      liveEvent(session, session.lap, 'order', `${car.driverId} 拒绝临场策略指令，继续按自己的判断比赛`, [car.driverId], true);
+      continue;
+    }
     car.pendingPit = choice.pit;
     if (choice.pit === 'stay_out') {
       const firstAcknowledgement = car.stayOutUntilLap < session.lap;

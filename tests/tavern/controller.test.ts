@@ -47,6 +47,25 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(env.messages[1].variables[0][PTR]).toBeTruthy();
   });
 
+  it('车队工程师默认走主 API，也可使用设置中的副 API', async () => {
+    for (let i = 0; i < 30 && !ctrl.stateAt()!.weekend; i++) {
+      const result = await ctrl.dispatch({ type: 'ADVANCE' });
+      expect(result.ok).toBe(true);
+    }
+    expect(ctrl.stateAt()!.weekend).toBeTruthy();
+    const main = await ctrl.requestEngineerStrategy('c1');
+    expect(main.ok).toBe(true);
+    expect(main.api).toBe('main');
+    expect(main.plan?.tyrePlan).toBeTruthy();
+    expect(env.generated.at(-1)?.options).toBeUndefined();
+
+    ctrl.updateSettings({ engineerApi: 'secondary', engineerProxyPreset: '策略副线', engineerModel: 'test-model' });
+    const secondary = await ctrl.requestEngineerStrategy('c1');
+    expect(secondary.ok).toBe(true);
+    expect(secondary.api).toBe('secondary');
+    expect(env.generated.at(-1)?.options).toEqual({ proxyPreset: '策略副线', model: 'test-model' });
+  });
+
   it('生成前注入实时数据提示词', async () => {
     await env.userSays('你好');
     await env.fire(env.events.GENERATION_AFTER_COMMANDS, 'normal', {}, false);

@@ -24,7 +24,7 @@ import { previewContractOffer } from '../engine/market';
 import { buildStatePrompt } from '../engine/prompt';
 import { applyAiCommands, describeLog, parseAiCommands } from '../engine/protocol';
 import { carRatings, driverOverall, moraleLabel, trackScore } from '../engine/ratings';
-import type { Action, Ambition, ContractOfferTerms, DataIssue, DriverAttr, FacilityType, GameState, StaffRole } from '../engine/types';
+import type { Action, Ambition, ContractOfferTerms, DataIssue, DriverAttr, DriverPlan, FacilityType, GameState, StaffRole } from '../engine/types';
 import { hashString, money, round1 } from '../engine/util';
 import { buildView, type GameView } from '../engine/view';
 import type { TavernEnv } from './env';
@@ -55,6 +55,9 @@ export interface Settings {
   maxRevisions: number;
   narrationText: string;
   autoNarrate: boolean;
+  engineerApi: 'main' | 'secondary';
+  engineerProxyPreset: string;
+  engineerModel: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -67,11 +70,21 @@ export const DEFAULT_SETTINGS: Settings = {
   maxRevisions: 30,
   narrationText: '（领队查看了最新的数据。请根据【待叙述事件】继续叙事。）',
   autoNarrate: false,
+  engineerApi: 'main',
+  engineerProxyPreset: '',
+  engineerModel: '',
 };
 
 export interface Outcome {
   ok: boolean;
   message: string;
+}
+
+export interface EngineerStrategyResult extends Outcome {
+  plan?: Partial<DriverPlan>;
+  explanation?: string;
+  api?: 'main' | 'secondary';
+  strategyLevel?: string;
 }
 
 export interface DataReport {
@@ -147,6 +160,9 @@ export class F1Controller {
     next.injectDepth = Math.max(0, Math.min(20, Math.round(Number(next.injectDepth) || 0)));
     next.maxRevisions = Math.max(8, Math.min(200, Math.round(Number(next.maxRevisions) || DEFAULT_SETTINGS.maxRevisions)));
     if (!['system', 'user', 'assistant'].includes(next.injectRole)) next.injectRole = 'system';
+    if (!['main', 'secondary'].includes(next.engineerApi)) next.engineerApi = 'main';
+    next.engineerProxyPreset = String(next.engineerProxyPreset ?? '').trim();
+    next.engineerModel = String(next.engineerModel ?? '').trim();
     this.settings = next;
     this.store.opts.maxRevisions = next.maxRevisions;
     const vars = this.env.getScriptVars() ?? {};
@@ -476,6 +492,52 @@ export class F1Controller {
     this.store.commit(state, { floor: Math.max(0, this.latestFloor()), kind: 'import', label: '导入存档', parent: null });
     this.notify('import');
     return { ok: true, message: '存档已导入' };
+  }
+
+  /**
+   * 车队工程师使用主 API 或已配置的副 API 解释一套后端选定的方案。
+   * 方案排名严格按车队策略水平选择，避免强队与弱队得到同样聪明的建议。
+   */
+  async requestEngineerStrategy(driverId: string, requestedApi?: 'main' | 'secondary'): Promise<EngineerStrategyResult> {
+    if (this.env.isGenerating()) return { ok: false, message: '当前正在生成内容，请稍后再请求工程师建议' };
+    const state = this.stateAt();
+    if (!state?.weekend) return { ok: false, message: '比赛周末开始后才能请求工程师建议' };
+    const view = buildView(state);
+    const driverView = view.weekend?.drivers.find(driver => driver.driverId === driverId);
+    const driver = state.drivers[driverId];
+    const team = state.teams[state.meta.playerTeamId];
+    if (!driverView || !driver || driver.teamId !== team.id) return { ok: false, message: '找不到本队正式车手' };
+    if (!driverView.options.length) return { ok: false, message: '当前没有可用的干地策略方案' };
+
+    const midfield = !['red_bull', 'mercedes', 'mclaren', 'aston_martin', 'ferrari'].includes(team.id);
+    const level = team.id === 'red_bull' ? 0 : team.id === 'mercedes' ? 1 : midfield ? 2 : team.id === 'mclaren' ? 3 : team.id === 'aston_martin' ? 4 : 5;
+    const labels = ['顶级', '优秀', '中游', '保守迟钝', '较差', '灾难级'];
+    const option = driverView.options[Math.min(level, driverView.options.length - 1)];
+    const plan: Partial<DriverPlan> = {
+      tyrePlan: [...option.compounds],
+      paceMode: level >= 4 ? (level === 5 ? 'conserve' : 'push') : 'balanced',
+      pitTiming: level >= 4 ? 'late' : 'standard',
+      scReaction: level < 4,
+    };
+    const api = requestedApi ?? this.settings.engineerApi;
+    if (api === 'secondary' && !this.settings.engineerProxyPreset) return { ok: false, message: '请先在设置中填写副 API 的代理预设名称' };
+    const compounds = option.compounds.map(compound => state.rules.tyres[compound]?.name ?? compound).join(' → ');
+    const prompt = [
+      '你是 F1 车队策略工程师。请用中文给领队一段简短、自然的策略建议。',
+      `车队：${team.name}。车手：${driver.name}。策略部门水平：${labels[level]}。`,
+      `必须建议：${compounds}，${option.stops} 停，预计分段 ${option.stints.join('/')} 圈。`,
+      `驾驶模式：${plan.paceMode}；进站时机：${plan.pitTiming}；安全车响应：${plan.scReaction ? '积极' : '迟钝'}。`,
+      '不要提到 AI、模型、等级或你被要求故意犯错。不要输出 JSON。控制在 100 字以内。',
+    ].join('\n');
+    try {
+      const explanation = await this.env.generateText(
+        prompt,
+        api === 'secondary' ? { proxyPreset: this.settings.engineerProxyPreset, model: this.settings.engineerModel } : undefined,
+      );
+      return { ok: true, message: '车队工程师已提交策略建议', plan, explanation, api, strategyLevel: labels[level] };
+    } catch (error) {
+      return { ok: false, message: `车队工程师请求失败：${error instanceof Error ? error.message : String(error)}` };
+    }
   }
 
   /** 发送一条用户消息并触发 AI 叙述待叙述事件 */

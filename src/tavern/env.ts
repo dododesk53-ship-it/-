@@ -18,6 +18,11 @@ export interface WorldbookText {
   book: string;
 }
 
+export interface TextGenerationOptions {
+  proxyPreset?: string;
+  model?: string;
+}
+
 export interface TavernEnv {
   getChatVars(): Record<string, any>;
   setChatVars(vars: Record<string, any>): void;
@@ -32,6 +37,8 @@ export interface TavernEnv {
   setMessageText(id: number, text: string): Promise<void>;
   createUserMessage(text: string): Promise<void>;
   triggerGeneration(): Promise<void>;
+  /** 独立文本生成。空配置使用酒馆当前主 API。 */
+  generateText(prompt: string, options?: TextGenerationOptions): Promise<string>;
   isGenerating(): boolean;
   chatId(): string;
   userName(): string;
@@ -69,6 +76,7 @@ declare const setChatMessages: (msgs: any[], opt?: any) => Promise<void>;
 declare const createChatMessages: (msgs: any[], opt?: any) => Promise<void>;
 declare const getLastMessageId: () => number;
 declare const triggerSlash: (cmd: string) => Promise<string>;
+declare const generateRaw: (options: Record<string, unknown>) => Promise<string>;
 declare const injectPrompts: (p: any[], opt?: any) => { uninject: () => void };
 declare const uninjectPrompts: (ids: string[]) => void;
 declare const registerMacroLike: (re: RegExp, fn: (...a: any[]) => string) => unknown;
@@ -130,6 +138,13 @@ export function createTavernEnv(): TavernEnv {
     createUserMessage: text => createChatMessages([{ role: 'user', message: text }]),
     triggerGeneration: async () => {
       await triggerSlash('/trigger');
+    },
+    generateText: async (prompt, options) => {
+      if (typeof generateRaw !== 'function') throw new Error('当前酒馆助手版本不支持独立生成');
+      const customApi = options?.proxyPreset
+        ? { proxy_preset: options.proxyPreset, ...(options.model ? { model: options.model } : {}) }
+        : undefined;
+      return String(await generateRaw({ user_input: prompt, should_stream: false, ...(customApi ? { custom_api: customApi } : {}) })).trim();
     },
     isGenerating: () => {
       try {

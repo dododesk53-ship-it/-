@@ -148,6 +148,14 @@ function kb(n: number) {
         <label class="row small" title="模拟练习赛/排位/正赛后自动发送一条消息让 AI 叙述"><input v-model="settings.autoNarrate" type="checkbox" />模拟后自动请求 AI 叙述</label>
       </div>
       <label class="field">「让 AI 叙述」时发送的消息<input v-model="settings.narrationText" type="text" /></label>
+      <div class="grid g3">
+        <label class="field">车队工程师默认 API
+          <select v-model="settings.engineerApi"><option value="main">主 API</option><option value="secondary">副 API</option></select>
+        </label>
+        <label class="field">副 API 代理预设名称<input v-model="settings.engineerProxyPreset" type="text" placeholder="proxy_preset" /></label>
+        <label class="field">副 API 模型<input v-model="settings.engineerModel" type="text" placeholder="例如 gpt-4o-mini" /></label>
+      </div>
+      <div class="tiny muted">车队工程师默认使用主 API。副 API 通过酒馆助手中已有的代理预设调用。</div>
       <div class="row" style="justify-content: flex-end"><button class="primary small" @click="save">保存设置</button></div>
     </div>
 

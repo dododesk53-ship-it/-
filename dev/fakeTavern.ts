@@ -25,6 +25,7 @@ export class FakeTavern implements TavernEnv {
   toasts: Array<[string, string]> = [];
   created: string[] = [];
   triggered = 0;
+  generated: Array<{ prompt: string; options?: { proxyPreset?: string; model?: string } }> = [];
   worldbook: WorldbookText[];
   emitted: string[] = [];
 
@@ -61,6 +62,10 @@ export class FakeTavern implements TavernEnv {
   async setMessageText(id: number, text: string) { const m = this.messages[id]; m.swipes[m.swipe_id] = text; }
   async createUserMessage(text: string) { this.created.push(text); this.messages.push({ role: 'user', swipes: [text], swipe_id: 0, variables: [{}] }); await this.fire(this.events.MESSAGE_SENT, this.messages.length - 1); }
   async triggerGeneration() { this.triggered++; }
+  async generateText(prompt: string, options?: { proxyPreset?: string; model?: string }) {
+    this.generated.push({ prompt, options: clone(options) });
+    return '工程师建议采用这套方案，并根据赛道变化保留临场调整空间。';
+  }
   isGenerating() { return this.generating; }
   chatId() { return 'chat-1'; }
   userName() { return '玩家'; }
