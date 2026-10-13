@@ -628,7 +628,7 @@ export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sp
       stints: optimizeStints(rules, track, compounds, totalLaps, factor), stintIndex: 0, pits: 0,
       cumulativeTime: index * 0.25, completedLaps: 0, status: 'running', reason: '', bestLap: null,
       damage: 0, partial: 0, repairPending: false, energy: 65, energyMode: plan.energyMode ?? 'balanced', pendingPit: null, pendingCompound: null, stayOutUntilLap: 0,
-      engineerLightRainAssessed: false, engineerWetAssessed: false, engineerTyreOverride: null, engineerTyreOverrideUntilLap: 0,
+      engineerLightRainAssessed: false, engineerWetAssessed: false, engineerWeatherSpell: 0, engineerTyreOverride: null, engineerTyreOverrideUntilLap: 0,
     };
     if (entry.team.isPlayer) lapChart[id] = [];
   }
@@ -677,9 +677,9 @@ function replacementCompound(state: GameState, session: LiveRaceState, car: Live
   return planned ?? state.rules.dryCompounds[1] ?? state.rules.dryCompounds[0] ?? car.tyre;
 }
 
-export function engineerDecisionRoll(session: Pick<LiveRaceState, 'id'>, car: Pick<LiveRaceCar, 'driverId'>, key: string, probability: number): boolean {
+export function engineerDecisionRoll(session: Pick<LiveRaceState, 'id'> & Partial<Pick<LiveRaceState, 'weatherRngState'>>, car: Pick<LiveRaceCar, 'driverId'>, key: string, probability: number): boolean {
   let hash = 2166136261;
-  for (const char of `${session.id}:${car.driverId}:${key}`) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  for (const char of `${session.id}:${session.weatherRngState ?? 0}:${car.driverId}:${key}`) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
   return new Rng(hash >>> 0).chance(probability);
 }
 
@@ -697,6 +697,7 @@ export function engineerWeatherRisk(teamId: string, teamName: string, wetness: n
 function applyEngineerWeatherDecision(state: GameState, session: LiveRaceState, car: LiveRaceCar): boolean {
   if (car.plan.strategySource !== 'engineer') return false;
   if (session.wetness < .02) {
+    if (car.engineerLightRainAssessed || car.engineerWetAssessed) car.engineerWeatherSpell = (car.engineerWeatherSpell ?? 0) + 1;
     car.engineerLightRainAssessed = false;
     car.engineerWetAssessed = false;
     car.engineerTyreOverride = null;
@@ -706,7 +707,7 @@ function applyEngineerWeatherDecision(state: GameState, session: LiveRaceState, 
   const risk = engineerWeatherRisk(team?.id ?? '', team?.name ?? '', session.wetness);
   if (risk?.preference === 'intermediate' && !car.engineerLightRainAssessed) {
     car.engineerLightRainAssessed = true;
-    if (engineerDecisionRoll(session, car, 'light-rain', risk.probability)) {
+    if (engineerDecisionRoll(session, car, `light-rain:${car.engineerWeatherSpell ?? 0}`, risk.probability)) {
       car.engineerTyreOverride = state.rules.wetCompound;
       car.engineerTyreOverrideUntilLap = session.lap + risk.holdLaps;
       liveEvent(session, session.lap, 'pit', `${car.driverId} 的工程师对小雨反应过度，要求提前换半雨胎`, [car.driverId], car.player);
@@ -716,7 +717,7 @@ function applyEngineerWeatherDecision(state: GameState, session: LiveRaceState, 
   if (session.wetness > .2) car.engineerLightRainAssessed = true;
   if (!car.engineerWetAssessed && session.wetness >= .3) {
     car.engineerWetAssessed = true;
-    if (risk && risk.preference !== 'intermediate' && engineerDecisionRoll(session, car, 'wet-dry-tyre', risk.probability)) {
+    if (risk && risk.preference !== 'intermediate' && engineerDecisionRoll(session, car, `wet-dry-tyre:${car.engineerWeatherSpell ?? 0}`, risk.probability)) {
       const dry = risk.preference === 'soft' ? state.rules.dryCompounds[0] : state.rules.dryCompounds[1] ?? state.rules.dryCompounds[0];
       if (dry) {
         car.engineerTyreOverride = dry;
@@ -735,6 +736,7 @@ function pitTriggerLap(car: LiveRaceCar): number {
 }
 
 function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, rng: Rng, force = false): void {
+  if (car.status !== 'running' || session.completedLaps >= session.totalLaps) return;
   const track = currentTrack(state);
   const planned = car.stintIndex < car.plannedCompounds.length - 1;
   const engineerOverride = applyEngineerWeatherDecision(state, session, car);
@@ -744,7 +746,7 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
   const weatherStop = engineerOverride || (car.tyreAge >= 2 && targetCompound !== car.tyre && currentMismatch > 1.2 && targetMismatch + .35 < currentMismatch);
   const stayOut = car.pendingPit === 'stay_out' && session.lap <= car.stayOutUntilLap;
   const shouldPit = force || car.pendingPit === 'box' || (!stayOut && (car.repairPending || weatherStop || (planned && car.tyreAge >= pitTriggerLap(car))));
-  if (!shouldPit || car.status !== 'running' || session.completedLaps >= session.totalLaps) return;
+  if (!shouldPit) return;
   const neutral = session.scLeft > 0 ? 0.5 : session.vscLeft > 0 ? 0.7 : 1;
   let stationary = 2.2 + (100 - car.pitCrewSkill) / 100 * 1.3 + rng.range(0, 0.4);
   if (car.repairPending) { stationary += 6; car.damage = 0; car.repairPending = false; const damage = [...session.damageLedger].reverse().find(d => d.driverId === car.driverId && !d.repairedInRace); if (damage) damage.repairedInRace = true; }
@@ -991,7 +993,7 @@ export function simulateRace(state: GameState, rng: Rng, kind: 'race' | 'sprint'
   const session = createRaceSession(state, rng, kind);
   while (session.stage !== 'finished') {
     if (session.pendingDecision) {
-      applyRaceDecision(state, session, session.pendingDecision.id, playerCars(session).map(car => ({ driverId: car.driverId, pit: 'auto' as const })));
+      applyRaceDecision(state, session, session.pendingDecision.id, session.pendingDecision.eligibleDriverIds.map(driverId => ({ driverId, pit: 'auto' as const })));
     } else advanceRaceSession(state, session, 'next_decision');
   }
   return finishRaceSession(state, session)!;

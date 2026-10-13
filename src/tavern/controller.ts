@@ -563,18 +563,20 @@ export class F1Controller {
       `驾驶模式：${plan.paceMode}；进站时机：${plan.pitTiming}；安全车响应：${plan.scReaction ? '积极' : '迟钝'}。`,
       '不要提到 AI、模型、等级或你被要求故意犯错。不要输出 JSON。控制在 100 字以内。',
     ].join('\n');
+    const fallback = `${gridContext}，干地基础方案为 ${compounds}，预计 ${option.stops} 停，分段 ${option.stints.join('/')} 圈；驾驶模式 ${plan.paceMode}，进站时机 ${plan.pitTiming}。天气预案：${weatherResponse}。`;
     try {
       const generated = await this.env.generateText(
         prompt,
         api === 'secondary' ? { proxyPreset: this.settings.engineerProxyPreset, model: this.settings.engineerModel } : undefined,
       );
-      const fallback = `${gridContext}，干地基础方案为 ${compounds}，预计 ${option.stops} 停，分段 ${option.stints.join('/')} 圈；驾驶模式 ${plan.paceMode}，进站时机 ${plan.pitTiming}。天气预案：${weatherResponse}。`;
       const explanation = safeWeatherAdvice(generated, rainWindow !== null) ? generated : fallback;
       const applied = await this.dispatch({ type: 'SET_PLAN', driverId, plan });
       if (!applied.ok) return { ok: false, message: `工程师策略无法自动执行：${applied.message}` };
       return { ok: true, message: '车队工程师策略已自动应用并执行', plan, explanation, api, strategyLevel: labels[level], gridPosition, weatherResponse };
     } catch (error) {
-      return { ok: false, message: `车队工程师请求失败：${error instanceof Error ? error.message : String(error)}` };
+      const applied = await this.dispatch({ type: 'SET_PLAN', driverId, plan });
+      if (!applied.ok) return { ok: false, message: `工程师策略无法自动执行：${applied.message}` };
+      return { ok: true, message: 'API 暂时不可用，工程师基础策略已自动应用并执行', plan, explanation: fallback, api, strategyLevel: labels[level], gridPosition, weatherResponse };
     }
   }
 

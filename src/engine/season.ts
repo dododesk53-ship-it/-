@@ -133,7 +133,7 @@ export function doRace(state: GameState, rng: Rng, kind: 'race' | 'sprint'): Out
   }
   while (live.stage !== 'finished') {
     if (live.pendingDecision) {
-      const choices = Object.values(live.cars).filter(c => c.player && c.status === 'running').map(c => ({ driverId: c.driverId, pit: 'auto' as const }));
+      const choices = live.pendingDecision.eligibleDriverIds.map(driverId => ({ driverId, pit: 'auto' as const }));
       if (!applyRaceDecision(state, live, live.pendingDecision.id, choices)) return fail('自动策略无法处理当前决策窗口');
     } else advanceRaceSession(state, live, 'next_decision');
   }

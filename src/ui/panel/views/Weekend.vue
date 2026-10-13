@@ -85,7 +85,7 @@ function engineerApiFor(driverId: string): 'main' | 'secondary' {
 }
 
 function usePlayerStrategy(d: WeekendDriverView) {
-  void setPlan(d, { strategySource: 'player', tyrePlan: [...customFor(d)] });
+  void setPlan(d, { strategySource: 'player', tyrePlan: [...customFor(d)], paceMode: 'balanced', pitTiming: 'standard', scReaction: true });
 }
 
 const strategyRiskTeam = computed(() => ['ferrari', 'mclaren', 'aston_martin'].includes(v.value.player.team.id));

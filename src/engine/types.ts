@@ -773,6 +773,7 @@ export interface LiveRaceCar {
   /** 工程师天气判断使用独立确定性随机流，不消耗比赛主随机流。 */
   engineerLightRainAssessed?: boolean;
   engineerWetAssessed?: boolean;
+  engineerWeatherSpell?: number;
   engineerTyreOverride?: Compound | null;
   engineerTyreOverrideUntilLap?: number;
 }

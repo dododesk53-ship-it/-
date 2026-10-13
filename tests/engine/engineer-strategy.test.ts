@@ -30,4 +30,14 @@ describe('engineer strategy execution', () => {
     state = act(state, { type: 'ADVANCE_RACE', sessionId: live.id, expectedRevision: live.revision, until: 'next_lap' });
     expect(state.weekend!.liveRace!.completedLaps).toBe(1);
   });
+
+  it('automatically resolves mixed player and engineer strategy modes', () => {
+    let state = advanceUntil(newTestGame(7191), current => current.season.phase === 'race');
+    const driverIds = Object.values(state.drivers).filter(driver => driver.teamId === state.meta.playerTeamId).map(driver => driver.id);
+    state = act(state, { type: 'SET_PLAN', driverId: driverIds[0], plan: { strategySource: 'engineer' } });
+    state = act(state, { type: 'SET_PLAN', driverId: driverIds[1], plan: { strategySource: 'player' } });
+    const finished = act(state, { type: 'RUN_RACE' });
+    expect(finished.weekend!.race).not.toBeNull();
+    expect(finished.weekend!.liveRace).toBeNull();
+  });
 });
