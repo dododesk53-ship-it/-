@@ -83,6 +83,8 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(weatherAware.ok).toBe(true);
     expect(weatherAware.gridPosition).toBe(2);
     expect(weatherAware.weatherResponse).toContain('第 10–14 圈可能降雨');
+    expect(weatherAware.explanation).toContain('天气预案');
+    expect(weatherAware.explanation).toContain('换半雨胎');
     expect(env.generated.at(-1)?.prompt).toContain('从 P2 发车');
     expect(env.generated.at(-1)?.prompt).toContain('正赛降雨概率 72%');
     expect(env.generated.at(-1)?.prompt).toContain('换半雨胎');

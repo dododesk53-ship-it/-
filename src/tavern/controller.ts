@@ -89,6 +89,13 @@ export interface EngineerStrategyResult extends Outcome {
   weatherResponse?: string;
 }
 
+function safeWeatherAdvice(text: string, hasRainWindow: boolean): boolean {
+  if (!hasRainWindow) return true;
+  const mentionsWetTyre = /(半雨胎|全雨胎|雨胎|intermediate|\binter\b|wet tyre)/i.test(text);
+  const contradictsTransition = /(别管.{0,8}(雨|预报)|不管.{0,8}(雨|预报)|全干胎|坚持.{0,12}干胎|下雨.{0,8}(别急|不急)|真下雨.{0,8}(别急|不急)|留在赛道.{0,12}(看看|观察)|不换.{0,8}雨胎|别换.{0,8}雨胎)/i.test(text);
+  return mentionsWetTyre && !contradictsTransition;
+}
+
 export interface DataReport {
   ok: boolean;
   origin: string;
@@ -556,10 +563,12 @@ export class F1Controller {
       '不要提到 AI、模型、等级或你被要求故意犯错。不要输出 JSON。控制在 100 字以内。',
     ].join('\n');
     try {
-      const explanation = await this.env.generateText(
+      const generated = await this.env.generateText(
         prompt,
         api === 'secondary' ? { proxyPreset: this.settings.engineerProxyPreset, model: this.settings.engineerModel } : undefined,
       );
+      const fallback = `${gridContext}，干地基础方案为 ${compounds}，预计 ${option.stops} 停，分段 ${option.stints.join('/')} 圈；驾驶模式 ${plan.paceMode}，进站时机 ${plan.pitTiming}。天气预案：${weatherResponse}。`;
+      const explanation = safeWeatherAdvice(generated, rainWindow !== null) ? generated : fallback;
       return { ok: true, message: '车队工程师已提交策略建议', plan, explanation, api, strategyLevel: labels[level], gridPosition, weatherResponse };
     } catch (error) {
       return { ok: false, message: `车队工程师请求失败：${error instanceof Error ? error.message : String(error)}` };
