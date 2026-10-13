@@ -219,8 +219,9 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
           <div class="block">
             <div class="label">正赛轮胎策略 <span class="tiny muted">（预测为干地；下雨时策略组会自动换雨胎）</span></div>
             <div class="plans">
-              <label v-for="(o, optionIndex) in d.options.slice(0, 2)" :key="o.id" class="plan" :class="{ on: planIs(d, o.compounds) || (optionIndex === 0 && d.plan.tyrePlan === 'auto') }">
-                <input type="radio" :checked="planIs(d, o.compounds) || (optionIndex === 0 && d.plan.tyrePlan === 'auto')" :disabled="done.race || store.busy" @change="setPlan(d, { tyrePlan: o.compounds })" />
+              <div v-if="d.plan.tyrePlan === 'auto'" class="tiny muted">当前使用策略组默认方案。请选择下方任一方案以固定本站策略。</div>
+              <label v-for="(o, optionIndex) in d.options.slice(0, 2)" :key="o.id" class="plan" :class="{ on: planIs(d, o.compounds) }">
+                <input type="radio" :checked="planIs(d, o.compounds)" :disabled="done.race || store.busy" @change="setPlan(d, { tyrePlan: o.compounds })" />
                 <span class="badge">{{ optionIndex + 1 }}</span>
                 <span class="row grow" style="gap: 4px">
                   <Tyre v-for="(c, i) in o.compounds" :key="i" :c="c" />

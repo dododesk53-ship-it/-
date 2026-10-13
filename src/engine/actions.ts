@@ -179,7 +179,7 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
         const car = live.cars[patch.driverId];
         const changed = (patch.paceMode !== undefined && patch.paceMode !== car.plan.paceMode) || (patch.energyMode !== undefined && patch.energyMode !== car.energyMode) || (patch.pitTiming !== undefined && patch.pitTiming !== car.plan.pitTiming);
         const driver = state.drivers[patch.driverId];
-        if (changed && driver && willDisobeyStrategy(driver, relationship, `${live.id}:tactics:${live.revision}:${driver.id}`)) refused.add(driver.id);
+        if (changed && driver && willDisobeyStrategy(driver, relationship, `${live.id}:tactics:lap-${live.lap}:${driver.id}`)) refused.add(driver.id);
       }
       if (action.orders) { if (!validOrders(action.orders, Object.values(live.cars).filter(c => c.player && c.status === 'running').map(c => c.driverId))) return fail('无效车队指令'); live.teamOrders = { ...action.orders }; }
       for (const patch of action.drivers) {

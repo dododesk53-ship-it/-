@@ -83,7 +83,7 @@ describe('resumable live race', () => {
     const started = act(launched, { type: 'RESOLVE_RACE_DECISION', sessionId: grid.id, expectedRevision: grid.revision, windowId: grid.pendingDecision!.id, drivers: Object.values(grid.cars).filter(c => c.player).map(c => ({ driverId: c.driverId, pit: 'auto' })) });
     const live = started.weekend!.liveRace!;
     const relationship = teammateRelationship(started, started.meta.playerTeamId);
-    while (!willDisobeyStrategy(started.drivers.c1, relationship, `${live.id}:tactics:${live.revision}:c1`)) live.revision++;
+    while (!willDisobeyStrategy(started.drivers.c1, relationship, `${live.id}:tactics:lap-${live.lap}:c1`)) live.lap++;
     const before = live.cars.c1.plan.paceMode;
     const result = act(started, { type: 'SET_RACE_TACTICS', sessionId: live.id, expectedRevision: live.revision, drivers: [{ driverId: 'c1', paceMode: before === 'push' ? 'conserve' : 'push' }] });
     expect(result.weekend!.liveRace!.cars.c1.plan.paceMode).toBe(before);
